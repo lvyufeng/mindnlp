@@ -41,6 +41,12 @@ MD5 = {
 }
 
 
+SPLIT_MAP = {
+    "train": "training.tar.gz",
+    "valid": "validation.tar.gz",
+    "test": "mmt16_task1_test.tar.gz",
+}
+
 @load_dataset.register
 def Multi30k(root: str = DEFAULT_ROOT, split: Union[Tuple[str], str] = ('train', 'valid', 'test'),
              language_pair: Tuple[str] = ('de', 'en'), proxies=None):
@@ -103,17 +109,19 @@ def Multi30k(root: str = DEFAULT_ROOT, split: Union[Tuple[str], str] = ('train',
     datasets_list = []
 
     if isinstance(split, str):
-        file_path, _ = cache_file(
-            None, cache_dir=cache_dir, url=URL[split], md5sum=MD5[split], proxies=proxies)
+        file_path = os.path.join(cache_dir, SPLIT_MAP[split])
+        # file_path, _ = cache_file(
+        #     None, cache_dir=cache_dir, url=URL[split], md5sum=MD5[split], proxies=proxies)
         file_list.append(file_path)
 
     else:
-        urls = itemgetter(*split)(URL)
-        md5s = itemgetter(*split)(MD5)
-        for i, url in enumerate(urls):
-            file_path, _ = cache_file(
-                None, cache_dir=cache_dir, url=url, md5sum=md5s[i], proxies=proxies)
-            file_list.append(file_path)
+        # urls = itemgetter(*split)(URL)
+        # md5s = itemgetter(*split)(MD5)
+        # for i, url in enumerate(urls):
+        #     file_path, _ = cache_file(
+        #         None, cache_dir=cache_dir, url=url, md5sum=md5s[i], proxies=proxies)
+        #     file_list.append(file_path)
+        file_list = itemgetter(*split)(SPLIT_MAP)
 
     for file in file_list:
         untar_files.append(untar(file, os.path.dirname(file)))

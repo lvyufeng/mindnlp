@@ -69,13 +69,13 @@ def IMDB(
         cache_dir = root
     mode_list = []
     datasets_list = ()
-    cache_file(
-        None,
-        cache_dir=cache_dir,
-        url=URL,
-        md5sum=MD5,
-        proxies=proxies,
-    )
+    # cache_file(
+    #     None,
+    #     cache_dir=cache_dir,
+    #     url=URL,
+    #     md5sum=MD5,
+    #     proxies=proxies,
+    # )
     if isinstance(split, str):
         mode_list.append(split)
     elif isinstance(split, tuple):
