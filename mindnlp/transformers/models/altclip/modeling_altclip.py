@@ -20,9 +20,11 @@ from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
 from mindnlp.utils import ModelOutput, logging
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -135,7 +137,7 @@ these attributes are present, their values will be recursively converted to tupl
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->AltRoberta
-class AltRobertaEmbeddings(nn.Cell):
+class AltRobertaEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -169,7 +171,7 @@ class AltRobertaEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -262,7 +264,7 @@ class AltRobertaEmbeddings(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->AltRoberta
-class AltRobertaSelfAttention(nn.Cell):
+class AltRobertaSelfAttention(nn.Module):
 
     """
     Represents a self-attention mechanism for the ALBERT model.
@@ -477,11 +479,11 @@ class AltRobertaSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
-class AltRobertaSelfOutput(nn.Cell):
+class AltRobertaSelfOutput(nn.Module):
 
     """A class representing the self-attention output module of the alternative implementation of the RoBERTa model.
     
-    This class inherits from the `nn.Cell` class and implements the functionality of the self-attention output module in the RoBERTa model. It applies a dense layer, followed by a dropout layer, and then
+    This class inherits from the `nn.Module` class and implements the functionality of the self-attention output module in the RoBERTa model. It applies a dense layer, followed by a dropout layer, and then
 applies layer normalization to the output. The output is the sum of the layer-normalized hidden states and the input tensor.
     
     Attributes:
@@ -517,7 +519,7 @@ applies layer normalization to the output. The output is the sum of the layer-no
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
@@ -542,10 +544,10 @@ applies layer normalization to the output. The output is the sum of the layer-no
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->AltRoberta
-class AltRobertaAttention(nn.Cell):
+class AltRobertaAttention(nn.Module):
 
     ''' 
-    The AltRobertaAttention class represents the attention mechanism used in the AltRoberta model. This class inherits from nn.Cell and includes methods for initializing the attention mechanism, pruning
+    The AltRobertaAttention class represents the attention mechanism used in the AltRoberta model. This class inherits from nn.Module and includes methods for initializing the attention mechanism, pruning
 attention heads, and constructing the attention output.
     
     Attributes:
@@ -559,7 +561,7 @@ attention heads, and constructing the attention output.
 output using the given inputs.
     
     Note:
-        The class inherits from nn.Cell and is designed for use in the AltRoberta model.
+        The class inherits from nn.Module and is designed for use in the AltRoberta model.
     '''
     def __init__(self, config, position_embedding_type=None):
         """
@@ -659,12 +661,12 @@ find_pruneable_heads_and_indices, prune_linear_layer) will propagate to the call
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->AltRoberta
-class AltRobertaIntermediate(nn.Cell):
+class AltRobertaIntermediate(nn.Module):
 
     """
     Represents the intermediate layer for an alternative implementation of the Roberta model.
     
-    This class inherits from nn.Cell and contains methods to initialize and construct the intermediate layer.
+    This class inherits from nn.Module and contains methods to initialize and construct the intermediate layer.
     
     Attributes:
         config (obj): Configuration object for the intermediate layer.
@@ -720,12 +722,12 @@ class AltRobertaIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
-class AltRobertaOutput(nn.Cell):
+class AltRobertaOutput(nn.Module):
 
     """
     Represents the output of an alternative Roberta model.
     
-    This class inherits from nn.Cell and includes methods for initializing the class and constructing the output tensor based on the input hidden states and input tensor. The output tensor is obtained by
+    This class inherits from nn.Module and includes methods for initializing the class and constructing the output tensor based on the input hidden states and input tensor. The output tensor is obtained by
 applying dense layers, dropout, and layer normalization to the input hidden states and input tensor.
     
     Attributes:
@@ -755,7 +757,7 @@ input hidden states and input tensor.
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
@@ -780,10 +782,10 @@ input hidden states and input tensor.
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->AltRoberta
-class AltRobertaLayer(nn.Cell):
+class AltRobertaLayer(nn.Module):
 
     """
-    This class represents a layer in the AltRoberta model. It inherits from the nn.Cell class.
+    This class represents a layer in the AltRoberta model. It inherits from the nn.Module class.
     
     Attributes:
     - chunk_size_feed_forward (int): The chunk size for feed-forward operations.
@@ -940,10 +942,10 @@ class AltRobertaLayer(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->AltRoberta
-class AltRobertaEncoder(nn.Cell):
+class AltRobertaEncoder(nn.Module):
 
     """
-    The 'AltRobertaEncoder' class is responsible for encoding input data using a variation of the Roberta model. This class inherits from the 'nn.Cell' class and provides methods to construct the encoder and
+    The 'AltRobertaEncoder' class is responsible for encoding input data using a variation of the Roberta model. This class inherits from the 'nn.Module' class and provides methods to construct the encoder and
 generate the output based on the input.
     
     The class consists of an initialization method that takes a configuration object as input and sets up the encoder layers. The 'construct' method takes various input tensors and optional parameters to
@@ -974,7 +976,7 @@ input parameters.
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([AltRobertaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([AltRobertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def construct(
@@ -1088,12 +1090,12 @@ input parameters.
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
-class AltRobertaPooler(nn.Cell):
+class AltRobertaPooler(nn.Module):
 
     """
     Represents a custom pooler layer for an alternative implementation of the RoBERTa model.
     
-    This class inherits from the nn.Cell module and provides a custom pooler layer for an alternative implementation of the RoBERTa model.
+    This class inherits from the nn.Module module and provides a custom pooler layer for an alternative implementation of the RoBERTa model.
     
     The AltRobertaPooler class initializes with a configuration object and includes methods to construct the pooler layer. The constructor initializes the dense layer and activation function. The construct
 method takes hidden_states as input, extracts the first token tensor, applies the dense layer, applies the activation function, and returns the pooled output.
@@ -1144,7 +1146,7 @@ method takes hidden_states as input, extracts the first token tensor, applies th
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->AltCLIP
-class AltCLIPAttention(nn.Cell):
+class AltCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config):
         """
@@ -1279,10 +1281,10 @@ class AltCLIPAttention(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->AltCLIP
-class AltCLIPMLP(nn.Cell):
+class AltCLIPMLP(nn.Module):
 
     """
-    This class represents an alternative implementation of the Multilayer Perceptron (MLP) used in the Contrastive Language-Image Pretraining (CLIP) model. It inherits from the `nn.Cell` class.
+    This class represents an alternative implementation of the Multilayer Perceptron (MLP) used in the Contrastive Language-Image Pretraining (CLIP) model. It inherits from the `nn.Module` class.
     
     Attributes:
         config (object): The configuration object containing the hyperparameters for the MLP.
@@ -1341,12 +1343,12 @@ class AltCLIPMLP(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->AltCLIP
-class AltCLIPEncoderLayer(nn.Cell):
+class AltCLIPEncoderLayer(nn.Module):
 
     """
     This class represents a single layer of the AltCLIPEncoder. It applies multi-head self-attention and feed-forward neural network operations to the input hidden states.
     
-    The AltCLIPEncoderLayer class inherits from the nn.Cell class.
+    The AltCLIPEncoderLayer class inherits from the nn.Module class.
     
     Attributes:
         embed_dim (int): The dimensionality of the input hidden states.
@@ -1399,9 +1401,9 @@ class AltCLIPEncoderLayer(nn.Cell):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = AltCLIPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = AltCLIPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def construct(
         self,
@@ -1445,7 +1447,7 @@ class AltCLIPEncoderLayer(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->AltCLIP
-class AltCLIPEncoder(nn.Cell):
+class AltCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`AltCLIPEncoderLayer`].
@@ -1473,7 +1475,7 @@ class AltCLIPEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layers = nn.CellList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def construct(
@@ -1559,12 +1561,12 @@ class AltCLIPEncoder(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->AltCLIP
-class AltCLIPVisionEmbeddings(nn.Cell):
+class AltCLIPVisionEmbeddings(nn.Module):
 
     """
     A class representing the alternate vision embeddings for CLIP (Contrastive Language-Image Pre-training) models in MindSpore.
     
-    This class extends the nn.Cell module and is used to generate embeddings for images in the CLIP model architecture. 
+    This class extends the nn.Module module and is used to generate embeddings for images in the CLIP model architecture. 
     The embeddings are constructed based on the input pixel values using a combination of class embedding, patch embedding, and position embedding.
     
     Attributes:
@@ -1616,7 +1618,7 @@ class AltCLIPVisionEmbeddings(nn.Cell):
             out_channels=self.embed_dim,
             kernel_size=self.patch_size,
             stride=self.patch_size,
-            has_bias=False,
+            bias=False,
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -1709,7 +1711,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_factor),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_factor, cell.weight.shape)
@@ -1722,13 +1724,13 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
 
 
-class AltCLIPVisionTransformer(nn.Cell):
+class AltCLIPVisionTransformer(nn.Module):
 
     """
     This class represents a vision transformer model for the Alternative Contrastive Learning for Image and Text (AltCLIP) framework. It encapsulates the functionality to process visual inputs using the
 AltCLIP vision transformer architecture.
     
-    The AltCLIPVisionTransformer class inherits from the nn.Cell class and consists of methods for initialization and construction. 
+    The AltCLIPVisionTransformer class inherits from the nn.Module class and consists of methods for initialization and construction. 
     
     The __init__ method initializes the AltCLIPVisionTransformer with the provided AltCLIPVisionConfig. It sets up the embeddings, encoder, and layer normalization components required for processing visual
 inputs.
@@ -1758,9 +1760,9 @@ controlling the output format.
         embed_dim = config.hidden_size
 
         self.embeddings = AltCLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = AltCLIPEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     def construct(
         self,
@@ -1842,7 +1844,7 @@ utilization of pre-trained models for various vision-related tasks.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Returns the input embeddings of the AltCLIPVisionModel.
         
@@ -1850,7 +1852,7 @@ utilization of pre-trained models for various vision-related tasks.
             self (AltCLIPVisionModel): An instance of the AltCLIPVisionModel class.
         
         Returns:
-            nn.Cell: The input embeddings of the AltCLIPVisionModel.
+            nn.Module: The input embeddings of the AltCLIPVisionModel.
         
         Raises:
             None.
@@ -2151,10 +2153,10 @@ and returns the model's output, including the last hidden state and the pooled C
         super().__init__(config)
         self.roberta = AltRobertaModel(config, add_pooling_layer=False)
         self.transformation = nn.Dense(config.hidden_size, config.project_dim)
-        self.pre_LN = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.pre_LN = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         This method returns the input embeddings for the AltCLIPTextModel.
         
@@ -2163,8 +2165,8 @@ and returns the model's output, including the last hidden state and the pooled C
                 The instance of the AltCLIPTextModel class.
         
         Returns:
-            nn.Cell
-                The input embeddings for the AltCLIPTextModel, represented as an instance of nn.Cell.
+            nn.Module
+                The input embeddings for the AltCLIPTextModel, represented as an instance of nn.Module.
         
         Raises:
             None
@@ -2350,9 +2352,9 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         self.text_model = AltCLIPTextModel(text_config)
         self.vision_model = AltCLIPVisionTransformer(vision_config)
 
-        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, has_bias=False)
-        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, has_bias=False)
-        self.logit_scale = Parameter(mindspore.tensor([self.config.logit_scale_init_value]))
+        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, bias=False)
+        self.logit_scale = Parameter(mindspore.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()

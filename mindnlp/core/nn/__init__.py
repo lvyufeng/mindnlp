@@ -14,3 +14,4 @@
 # ============================================================================
 """mindnlp nn"""
 from .parameter import Parameter
+from .moduels import *

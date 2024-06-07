@@ -16,6 +16,7 @@
 """
 Injection mindspore.nn for MindNLP
 """
+import os
 import operator
 from typing import OrderedDict, List
 from functools import reduce, partial
@@ -24,6 +25,7 @@ import types
 from uuid import uuid4
 import mindspore.experimental
 import mindspore.experimental.optim
+import mindspore.train.serialization
 from packaging import version
 import numpy as np
 import mindspore
@@ -1233,95 +1235,6 @@ class Conv1dTranspose(_Conv):
         output = output.squeeze(2)
         return output
 
-
-class LayerNorm(nn.Cell):
-    r"""
-    Applies Layer Normalization over a mini-batch of inputs.
-    """
-    def __init__(self,
-                 normalized_shape,
-                 begin_norm_axis=-1,
-                 begin_params_axis=-1,
-                 gamma_init='ones',
-                 beta_init='zeros',
-                 epsilon=1e-5,
-                 eps=None,
-                 dtype=mstype.float32,
-                 elementwise_affine=True
-                 ):
-        """Initialize LayerNorm."""
-        super().__init__()
-        if isinstance(normalized_shape, int):
-            normalized_shape = [normalized_shape]
-        if not isinstance(normalized_shape, (tuple, list)):
-            raise TypeError(f"For '{self.cls_name}', the type of 'normalized_shape' must be tuple[int] or list[int], "
-                            f"but got {normalized_shape} and the type is {type(normalized_shape)}.")
-        if not normalized_shape:
-            raise ValueError(
-                f"Expected normalized_shape to be at least 1-dimensional, i.e., containing at "
-                f"least one element, but got normalized_shape = {normalized_shape}"
-            )
-
-        self.normalized_shape = normalized_shape
-        self.begin_norm_axis = begin_norm_axis
-        self.begin_params_axis = begin_params_axis
-        if eps and epsilon == 1e-5:
-            self.epsilon = eps
-        else:
-            self.epsilon = epsilon
-
-        self.weight = Parameter(initializer(
-            gamma_init, normalized_shape, dtype=dtype), name="weight")
-        self.bias = Parameter(initializer(
-            beta_init, normalized_shape, dtype=dtype), name="bias")
-        self.layer_norm = ops.LayerNorm(begin_norm_axis=self.begin_norm_axis,
-                                      begin_params_axis=self.begin_params_axis,
-                                      epsilon=self.epsilon)
-        self.elementwise_affine = elementwise_affine
-
-    def construct(self, input_x):
-        r"""
-        Constructs the normalized output tensor based on the input tensor using Layer Normalization.
-        
-        Args:
-            self (object): The instance of the LayerNorm class.
-            input_x (tensor): The input tensor to be normalized.
-            
-        Returns:
-            None: This method does not return any value, as the normalized tensor is directly stored within the instance.
-        
-        Raises:
-            ValueError: If the 'elementwise_affine' attribute is not a boolean.
-            TypeError: If the weights and biases cannot be cast to the same data type as the input tensor.
-            ValueError: If the normalized shape of the input tensor does not match the expected shape for the layer normalization.
-        """
-        if self.elementwise_affine:
-            y, _, _ = self.layer_norm(input_x, self.weight.astype(input_x.dtype), self.bias.astype(input_x.dtype))
-        else:
-            y, _, _ = self.layer_norm(input_x, ops.ones(self.normalized_shape, input_x.dtype),
-                                      ops.zeros(self.normalized_shape, input_x.dtype),)
-        return y
-
-    def extend_repr(self):
-        r"""
-        Method to extend the representation of the LayerNorm class instance.
-        
-        Args:
-            self (LayerNorm): The instance of the LayerNorm class.
-                - Represents the current instance of the LayerNorm class.
-                - Type: LayerNorm class instance.
-        
-        Returns:
-            None
-                - This method does not return any value.
-        
-        Raises:
-            None
-                - This method does not raise any exceptions.
-        """
-        return f'normalized_shape={self.normalized_shape}, begin_norm_axis={self.begin_norm_axis}, ' \
-               f'begin_params_axis={self.begin_params_axis}, weight={self.weight}, bias={self.bias}'
-
 class BatchNorm1d(nn.Cell):
     """Batch Normalization base class."""
     def __init__(self,
@@ -1585,7 +1498,6 @@ nn.Cell.load_state_dict = cell_load_state_dict
 nn.Cell.parameters_dict = parameters_dict
 
 
-nn.LayerNorm = LayerNorm
 nn.Conv1d = Conv1d
 nn.Conv2d = Conv2d
 nn.Conv1dTranspose = Conv1dTranspose

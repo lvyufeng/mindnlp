@@ -22,9 +22,11 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
 from mindnlp.utils import (
     ModelOutput,
     logging,
@@ -63,7 +65,7 @@ ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class AlbertEmbeddings(nn.Cell):
+class AlbertEmbeddings(nn.Module):
     """
     Construct the embeddings from word, position and token_type embeddings.
     """
@@ -96,7 +98,7 @@ class AlbertEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm([config.embedding_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm([config.embedding_size], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -168,7 +170,7 @@ class AlbertEmbeddings(nn.Cell):
         return embeddings
 
 
-class AlbertAttention(nn.Cell):
+class AlbertAttention(nn.Module):
 
     """ 
     A class representing the attention mechanism for the ALBERT (A Lite BERT) model.
@@ -177,7 +179,7 @@ class AlbertAttention(nn.Cell):
     It includes methods for processing queries, keys, and values, calculating attention scores, applying attention masks, 
     handling position embeddings, and generating the final contextualized output.
     
-    This class inherits from the nn.Cell class and contains the following methods:
+    This class inherits from the nn.Module class and contains the following methods:
     - __init__(self, config: AlbertConfig): Initializes the AlbertAttention instance with the provided configuration.
     - transpose_for_scores(self, x: mindspore.Tensor) -> mindspore.Tensor: Transposes the input tensor for calculating attention scores.
     - prune_heads(self, heads: List[int]) -> None: Prunes specific attention heads from the model.
@@ -231,7 +233,7 @@ class AlbertAttention(nn.Cell):
         self.attention_dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
         self.output_dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.pruned_heads = set()
 
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -375,10 +377,10 @@ num_attention_heads.
         return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
 
 
-class AlbertLayer(nn.Cell):
+class AlbertLayer(nn.Module):
 
     '''
-    This class represents an AlbertLayer module, which is a single layer of the Albert model. It inherits from nn.Cell and contains methods for initialization and forward pass computation.
+    This class represents an AlbertLayer module, which is a single layer of the Albert model. It inherits from nn.Module and contains methods for initialization and forward pass computation.
     
     The __init__ method initializes the AlbertLayer with the provided configuration. It sets various attributes based on the configuration, including chunk size for feed forward, sequence length dimension,
 layer normalization, attention module, feed forward network, activation function, and dropout.
@@ -409,7 +411,7 @@ along with optional attention outputs.
         self.config = config
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.full_layer_layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.full_layer_layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.attention = AlbertAttention(config)
         self.ffn = nn.Dense(config.hidden_size, config.intermediate_size)
         self.ffn_output = nn.Dense(config.intermediate_size, config.hidden_size)
@@ -482,13 +484,13 @@ along with optional attention outputs.
         return ffn_output
 
 
-class AlbertLayerGroup(nn.Cell):
+class AlbertLayerGroup(nn.Module):
 
     """
-    This class represents a group of Albert layers within the Albert model. It inherits from the nn.Cell class.
+    This class represents a group of Albert layers within the Albert model. It inherits from the nn.Module class.
     
     Attributes:
-        albert_layers (nn.CellList): A list of AlbertLayer instances that make up the group.
+        albert_layers (nn.ModuleList): A list of AlbertLayer instances that make up the group.
     
     Methods:
         __init__(self, config: AlbertConfig): 
@@ -522,7 +524,7 @@ parameter of the configuration object.
         """
         super().__init__()
 
-        self.albert_layers = nn.CellList([AlbertLayer(config) for _ in range(config.inner_group_num)])
+        self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
     def construct(
         self,
@@ -572,17 +574,17 @@ parameter of the configuration object.
         return outputs  # last-layer hidden state, (layer hidden states), (layer attentions)
 
 
-class AlbertTransformer(nn.Cell):
+class AlbertTransformer(nn.Module):
 
     """
     This class represents the AlbertTransformer, which is a part of the Albert model in the MindSpore library. It is responsible for constructing the Albert transformer layers.
     
-    The AlbertTransformer class inherits from the nn.Cell class.
+    The AlbertTransformer class inherits from the nn.Module class.
     
     Attributes:
         config (AlbertConfig): The configuration object for the Albert model.
         embedding_hidden_mapping_in (nn.Dense): The dense layer to map the input hidden states to the embedding size.
-        albert_layer_groups (nn.CellList): A list of AlbertLayerGroup instances representing the transformer layers.
+        albert_layer_groups (nn.ModuleList): A list of AlbertLayerGroup instances representing the transformer layers.
     
     Methods:
         construct(hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=True):
@@ -598,7 +600,7 @@ class AlbertTransformer(nn.Cell):
     
             Returns:
                 Union[BaseModelOutput, Tuple]: The output as a BaseModelOutput instance or a tuple of tensors.
-    
+
     """
     def __init__(self, config: AlbertConfig):
         """
@@ -619,7 +621,7 @@ class AlbertTransformer(nn.Cell):
 
         self.config = config
         self.embedding_hidden_mapping_in = nn.Dense(config.embedding_size, config.hidden_size)
-        self.albert_layer_groups = nn.CellList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
+        self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
     def construct(
         self,
@@ -699,7 +701,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -901,6 +903,7 @@ method is used to prune heads of the model, and the 'construct' method construct
                 token_type_ids = ops.zeros(input_shape, dtype=mindspore.int64)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * mindspore.tensor(np.finfo(mindspore.dtype_to_nptype(self.dtype)).min)
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
@@ -1104,13 +1107,13 @@ prediction head to compute the total loss for pre-training tasks.
         )
 
 
-class AlbertMLMHead(nn.Cell):
+class AlbertMLMHead(nn.Module):
 
     """
     AlbertMLMHead class represents the MLM (Masked Language Model) head for an ALBERT (A Lite BERT) model in a neural network. 
     It includes methods for initializing the MLM head, constructing the prediction scores, and tying the weights. 
     
-    This class inherits from the nn.Cell class and implements the following methods:
+    This class inherits from the nn.Module class and implements the following methods:
     
     1. __init__(self, config: AlbertConfig):
        Initializes the AlbertMLMHead with the provided AlbertConfig settings. 
@@ -1146,12 +1149,13 @@ class AlbertMLMHead(nn.Cell):
         """
         super().__init__()
 
-        self.LayerNorm = nn.LayerNorm([config.embedding_size], epsilon=config.layer_norm_eps)
-        self.bias = Parameter(ops.zeros(config.vocab_size), 'bias')
+        self.LayerNorm = nn.LayerNorm([config.embedding_size], eps=config.layer_norm_eps)
+        self.bias = Parameter(ops.zeros(config.vocab_size))
         self.dense = nn.Dense(config.hidden_size, config.embedding_size)
         self.decoder = nn.Dense(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
         self.decoder.bias = self.bias
+        assert id(self.decoder.bias == id(self.bias))
 
     def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
@@ -1196,12 +1200,12 @@ class AlbertMLMHead(nn.Cell):
         self.bias = self.decoder.bias
 
 
-class AlbertSOPHead(nn.Cell):
+class AlbertSOPHead(nn.Module):
 
     """
     This class represents the AlbertSOPHead, which is responsible for constructing the sentence-order prediction (SOP) head in an ALBERT (A Lite BERT) model.
     
-    The AlbertSOPHead class inherits from nn.Cell and provides methods for initializing the SOP head and constructing the logits for SOP classification.
+    The AlbertSOPHead class inherits from nn.Module and provides methods for initializing the SOP head and constructing the logits for SOP classification.
     
     Attributes:
         config (AlbertConfig): The configuration object for the ALBERT model.

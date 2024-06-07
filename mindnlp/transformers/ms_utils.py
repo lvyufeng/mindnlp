@@ -18,14 +18,15 @@ import inspect
 from typing import Union, Optional, List, Tuple
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops, Parameter
 from mindspore.common.initializer import initializer, Normal
 
+from mindnlp.core import nn
 from mindnlp._legacy.nn import Matmul
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
-class Conv1D(nn.Cell):
+class Conv1D(nn.Module):
     """
     1D-convolutional layer Basically works like a linear layer but the weights are transposed.
 
@@ -150,7 +151,7 @@ def prune_linear_layer(layer, index, axis=0):
             b = layer.bias[index].copy()
     new_size = list(layer.weight.shape)
     new_size[axis] = len(index)
-    new_layer = nn.Dense(new_size[1], new_size[0], has_bias=layer.bias is not None)
+    new_layer = nn.Dense(new_size[1], new_size[0], bias=layer.bias is not None)
     new_layer.weight.requires_grad = False
     new_layer.weight.set_data(W)
     new_layer.weight.requires_grad = True

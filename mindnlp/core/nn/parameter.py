@@ -13,22 +13,28 @@
 # limitations under the License.
 # ============================================================================
 """mindnlp parameter"""
+from mindspore._c_expression import Tensor as MSTensor
 from ..tensor import Tensor
 
 class Parameter(Tensor):
     requires_grad = False
     def __new__(cls, data, requires_grad=True):
         # Ensure data is an instance of Tensor
-        if not isinstance(data, Tensor):
+        if not isinstance(data, (Tensor, MSTensor)):
             raise TypeError("data must be an instance of Tensor")
 
         # Create a new instance of Parameter
         instance = super(Parameter, cls).__new__(cls)
 
-        # Reuse the MSTensor instance from data
-        instance.tensor = data.tensor
+        if isinstance(data, Tensor):
+            # Reuse the MSTensor instance from data
+            instance.tensor = data.tensor
+            instance.stub = data.stub  # Reuse the stub attribute from data
+        elif isinstance(data, MSTensor):
+            instance.tensor = data
+            instance.stub = None
+
         instance.requires_grad = requires_grad
-        instance.stub = data.stub  # Reuse the stub attribute from data
 
         return instance
 

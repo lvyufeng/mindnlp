@@ -710,8 +710,8 @@ def _rebuild_tensor_v2(storage, storage_offset, size, stride, requires_grad, bac
         None: This function does not raise any exceptions.
     '''
     if size == ():
-        size = (1,)
-        stride = (1,)
+        array = storage[storage_offset: storage_offset + 1].reshape(())
+        return mindspore.Parameter(array, requires_grad=requires_grad)
     num_elemets = reduce(operator.mul, size)
     array = storage[storage_offset: storage_offset + num_elemets]
 

@@ -14,8 +14,10 @@
 # ============================================================================
 """mindnlp tensor"""
 from mindspore import Tensor as MSTensor
-from mindspore.common._stub_tensor import StubTensor
+from mindspore._c_expression import Tensor as MetaTensor
+from mindspore.common._stub_tensor import StubTensor, _stub_method
 from mindspore._c_expression import TensorNode # pylint: disable=no-name-in-module
+
 
 class Tensor(StubTensor):
     tensor = None
@@ -32,13 +34,41 @@ class Tensor(StubTensor):
     def data(self):
         return self.tensor
 
+    @property
+    def shape(self):
+        """shape stub."""
+        if self.stub:
+            if not hasattr(self, "stub_shape"):
+                self.stub_shape = self.stub.get_shape()
+            return self.stub_shape
+        return tuple(self.tensor.shape)
+
     def stub_sync(self):
         """sync real tensor."""
         if self.stub:
             val = self.stub.get_value()
-            self.tensor = MSTensor(val, internal=True)
+            self.tensor = MSTensor(val)
             if hasattr(self, "member_cache"):
                 for k, v in self.member_cache.items():
                     setattr(self.tensor, k, v)
             self.stub = None
         return self.tensor
+
+    def __hash__(self):
+        return hash(id(self))
+
+    def copy_(self, value):
+        if isinstance(value, Tensor):
+            self.stub = value.stub
+            self.tensor = value.tensor
+        elif isinstance(value, MetaTensor):
+            self.stub = None
+            self.tensor = value
+        else:
+            raise ValueError(f'not support type: {type(value)}')
+
+    def set_data(self, data):
+        self.copy_(data)
+
+def tensor(data, *, dtype=None):
+    return Tensor(data, dtype)

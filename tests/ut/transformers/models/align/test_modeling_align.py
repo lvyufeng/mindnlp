@@ -556,4 +556,5 @@ class AlignModelIntegrationTest(unittest.TestCase):
             (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
         )
         expected_logits = mindspore.tensor([[9.7093, 3.4679]])
+        print(outputs.logits_per_image.asnumpy(), expected_logits.asnumpy())
         self.assertTrue(np.allclose(outputs.logits_per_image.asnumpy(), expected_logits.asnumpy(), atol=1e-3))

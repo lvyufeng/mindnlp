@@ -32,6 +32,7 @@ from pytest import mark
 
 import mindspore
 
+import mindnlp
 from mindnlp.transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
@@ -79,7 +80,8 @@ from mindnlp.configs import (
 
 if is_mindspore_available():
     import mindspore
-    from mindspore import nn, ops
+    from mindspore import ops
+    from mindnlp.core import nn
 
     from mindnlp.transformers import MODEL_MAPPING
 
@@ -195,7 +197,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.construct)
+            signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -236,6 +238,7 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-4)
 
         for model_class in self.all_model_classes:
+            print(model_class)
             model = model_class(config)
             model.set_train(False)
 
@@ -354,16 +357,13 @@ class ModelTesterMixin:
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                # mindspore.save_checkpoint(model, os.path.join(tmpdirname, "mindspore.ckpt"))
+                # mindnlp.core.serialization.save_checkpoint(model, os.path.join(tmpdirname, "mindspore.ckpt"))
                 model_fast_init = model_class_copy.from_pretrained(tmpdirname)
                 model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
                 # Before we test anything
 
                 for key in model_fast_init.parameters_dict().keys():
-                    if isinstance(model_slow_init.parameters_dict()[key], mindspore.Parameter):
-                        max_diff = (model_slow_init.parameters_dict()[key] - model_fast_init.parameters_dict()[key]).sum().asnumpy().item()
-                    else:
-                        max_diff = (model_slow_init.parameters_dict()[key] ^ model_fast_init.state_dict()[key]).sum().asnumpy().item()
+                    max_diff = (model_slow_init.parameters_dict()[key] - model_fast_init.parameters_dict()[key]).sum().asnumpy().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
@@ -397,20 +397,16 @@ class ModelTesterMixin:
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.config.save_pretrained(tmpdirname)
-                mindspore.save_checkpoint(model, os.path.join(tmpdirname, "mindspore.ckpt"))
+                mindnlp.core.serialization.save_checkpoint(model, os.path.join(tmpdirname, "mindspore.ckpt"))
 
                 model_fast_init = base_class_copy.from_pretrained(tmpdirname)
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.parameters_dict().keys():
-                    if isinstance(model_slow_init.parameters_dict()[key], mindspore.Parameter): # bitwise_or do not support Parameter
-                        max_diff = ops.max(
-                            ops.abs(model_slow_init.parameters_dict()[key] - model_fast_init.parameters_dict()[key])
-                        )[0].asnumpy().item()
-                    else:
-                        max_diff = ops.max(
-                            model_slow_init.parameters_dict()[key] ^ model_fast_init.parameters_dict()[key]
-                        )[0].asnumpy().item()
+                    max_diff = ops.max(
+                        ops.abs(model_slow_init.parameters_dict()[key] - model_fast_init.parameters_dict()[key])
+                    )[0].asnumpy().item()
+
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
@@ -419,10 +415,10 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            for name, param in model.parameters_and_names():
+            for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        ((param.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
@@ -620,7 +616,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
             if model.config.is_encoder_decoder:
-                signature = inspect.signature(model.construct)
+                signature = inspect.signature(model.forward)
                 arg_names = [*signature.parameters.keys()]
                 if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
@@ -1097,7 +1093,7 @@ class ModelTesterMixin:
 
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
-            model_signature = inspect.signature(getattr(model_class, "construct"))
+            model_signature = inspect.signature(getattr(model_class, "forward"))
             # The main input is the name of the argument after `self`
             observed_main_input_name = list(model_signature.parameters.keys())[1]
             self.assertEqual(model_class.main_input_name, observed_main_input_name)
@@ -1188,8 +1184,8 @@ class ModelTesterMixin:
 
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
                 # Checking the state dicts are correct
-                reloaded_state = model_reloaded.parameters_dict()
-                for k, v in model.parameters_dict().items():
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model.state_dict().items():
                     self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
 
                 # Checking there was no complain of missing weights
@@ -1236,10 +1232,10 @@ class ModelTesterMixin:
                 # We are nuking ALL weights on file, so every parameter should
                 # yell on load. We're going to detect if we yell too much, or too little.
                 placeholder_dict = {"tensor": mindspore.Parameter(mindspore.tensor([1, 2]))}
-                mindspore.save_checkpoint(placeholder_dict, os.path.join(tmp_dir, 'mindspore.ckpt'))
+                mindnlp.core.serialization.save_checkpoint(placeholder_dict, os.path.join(tmp_dir, 'mindspore.ckpt'))
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
-                params = dict(model_reloaded.parameters_and_names())
+                params = model_reloaded.state_dict()
                 param_names = params.keys()
 
                 missing_keys = set(infos["missing_keys"])
@@ -1248,7 +1244,7 @@ class ModelTesterMixin:
                 # Remove tied weights from extra missing: they are normally not warned as missing if their tied
                 # counterpart is present but here there are no weights at all so we do get the warning.
                 ptrs = collections.defaultdict(list)
-                for name, tensor in model_reloaded.parameters_dict().items():
+                for name, tensor in model_reloaded.state_dict().items():
                     ptrs[id(tensor)].append(name)
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:

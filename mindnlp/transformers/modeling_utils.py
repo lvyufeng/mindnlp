@@ -28,10 +28,12 @@ from tqdm.autonotebook import tqdm
 
 import numpy as np
 import mindspore
-from mindspore import load_checkpoint, save_checkpoint
-from mindspore import nn, ops, Tensor, Parameter
+from mindspore import ops
 from mindspore._c_expression import Tensor as Tensor_ # pylint: disable=no-name-in-module
 
+from ..core import nn, Tensor
+from ..core.nn import Parameter
+from ..core.serialization import load_checkpoint, save_checkpoint
 from mindnlp.configs import PT_WEIGHTS_NAME, WEIGHTS_NAME, WEIGHTS_INDEX_NAME, PT_WEIGHTS_INDEX_NAME, \
     SAFE_WEIGHTS_NAME, SAFE_WEIGHTS_INDEX_NAME
 from mindnlp.utils.download import is_remote_url, download_url, cached_file, get_checkpoint_shard_files
@@ -77,7 +79,7 @@ def no_init_weights(_skip_init, _enable=True):
             replace_references(mindspore.common.initializer.initializer, init_func, ignore_vars=['init_func'])
 
 
-def set_initialized_submodules(model: nn.Cell, state_dict_keys):
+def set_initialized_submodules(model: nn.Module, state_dict_keys):
     """
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
@@ -112,7 +114,7 @@ def set_initialized_submodules(model: nn.Cell, state_dict_keys):
     return not_initialized_submodules
 
 
-class CellUtilMixin:
+class ModuleUtilsMixin:
     """
     A few utilities to be used as a mixin.
     """
@@ -203,7 +205,7 @@ class CellUtilMixin:
             # - if the model is an encoder, make the mask broadcastable
             #   to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                extended_attention_mask = CellUtilMixin.create_extended_attention_mask_for_decoder(
+                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask
                 )
             else:
@@ -266,7 +268,7 @@ class CellUtilMixin:
         return head_mask
 
 
-class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterMixin):
     """
     Abstract class for Pretrained models
     """
@@ -307,7 +309,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
             - TypeError: If the config parameter is not of the expected type.
             - RuntimeError: If an error occurs during the initialization process.
         """
-        super().__init__(config)
+        super().__init__()
         self._check_and_unset_acl()
         # Save config in model
         self.config = config
@@ -413,24 +415,24 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         """
         return getattr(self, self.base_model_prefix, self)
 
-    def get_input_embeddings(self) -> "nn.Cell":
+    def get_input_embeddings(self) -> "nn.Module":
         """
         Returns the model's input embeddings.
 
         Returns:
-            :obj:`nn.Cell`: A mindspore cell mapping vocabulary to hidden states.
+            :obj:`nn.Module`: A mindspore cell mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
             return base_model.get_input_embeddings()
         raise NotImplementedError
 
-    def set_input_embeddings(self, new_embeddings: nn.Cell):
+    def set_input_embeddings(self, new_embeddings: nn.Module):
         """
         Set model's input embeddings.
 
         Args:
-            value (:obj:`nn.Cell`): A mindspore cell mapping vocabulary to hidden states.
+            value (:obj:`nn.Module`): A mindspore cell mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
@@ -452,12 +454,12 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         """
         return None  # Overwrite for models with output embeddings
 
-    def set_output_embeddings(self, new_embeddings: nn.Cell):
+    def set_output_embeddings(self, new_embeddings: nn.Module):
         """
         Set model's output embeddings.
 
         Args:
-            value (:obj:`nn.Cell`): A mindspore cell mapping vocabulary to hidden states.
+            value (:obj:`nn.Module`): A mindspore cell mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
@@ -497,7 +499,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 cell._tie_weights()
 
     @staticmethod
-    def _tie_encoder_decoder_weights(encoder: nn.Cell, decoder: nn.Cell, base_model_prefix: str):
+    def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         """tie encoder decoder weights"""
         uninitialized_encoder_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
@@ -507,15 +509,15 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
             )
 
         def tie_encoder_to_decoder_recursively(
-            decoder_pointer: nn.Cell,
-            encoder_pointer: nn.Cell,
+            decoder_pointer: nn.Module,
+            encoder_pointer: nn.Module,
             module_name: str,
             uninitialized_encoder_weights: List[str],
             depth=0,
         ):
-            assert isinstance(decoder_pointer, nn.Cell) and isinstance(
-                encoder_pointer, nn.Cell
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(
+                encoder_pointer, nn.Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -552,7 +554,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     elif depth > 500:
                         raise ValueError(
                             "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is"
-                            " a circular dependency between two or more `nn.Cell` of your model."
+                            " a circular dependency between two or more `nn.Module` of your model."
                         )
                     else:
                         decoder_name = encoder_name = name
@@ -579,7 +581,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         """
         if hasattr(output_embeddings, 'weight'):
             output_embeddings.weight = input_embeddings.weight
-            output_embeddings._params['weight'] = input_embeddings.weight
+            # output_embeddings._params['weight'] = input_embeddings.weight
 
         if getattr(output_embeddings, "bias", None) is not None:
             if output_embeddings.weight.shape[0] == output_embeddings.bias.shape[0]:
@@ -588,7 +590,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 # instantial a new Parameter since mindspore.Parameter do not support assign_value with different shape
                 if output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0] > 0:
                     new_bias = ops.pad(
-                        output_embeddings.bias.data,
+                        output_embeddings.bias,
                         (0, output_embeddings.weight.shape[0] -
                         output_embeddings.bias.shape[0]),
                         "constant",
@@ -596,8 +598,8 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     )
                 else:
                     new_bias = output_embeddings.bias[:output_embeddings.weight.shape[0]]
-                new_bias = Parameter(new_bias, name=output_embeddings.bias.name, requires_grad=output_embeddings.bias.requires_grad)
-                replace_references(output_embeddings.bias, new_bias)
+                new_bias = Parameter(new_bias, requires_grad=output_embeddings.bias.requires_grad)
+                output_embeddings.bias.copy_(new_bias)
 
         if hasattr(output_embeddings, "out_channels") and hasattr(input_embeddings, "vocab_size"):
             output_embeddings.out_channels = input_embeddings.vocab_size
@@ -617,7 +619,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
 
         Return:
-            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings nn.Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         if new_num_tokens is None and pad_to_multiple_of is None:
@@ -680,7 +682,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
     ) -> nn.Embedding:
-        """ Build a resized Embedding Module from a provided token Embedding Module.
+        """ Build a resized Embedding nn.Module from a provided token Embedding nn.Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
 
@@ -689,9 +691,9 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 New number of tokens in the embedding matrix.
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
+                If not provided or None: return the provided token Embedding nn.Module.
         Return: ``mindspore.nn.Embeddings``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+            Pointer to the resized Embedding nn.Module or the old Embedding nn.Module if new_num_tokens is None
         """
         if pad_to_multiple_of is not None:
             if not isinstance(pad_to_multiple_of, int):
@@ -732,7 +734,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         self, old_lm_head: nn.Dense, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
     ) -> nn.Dense:
         """
-        Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
+        Build a resized Linear nn.Module from a provided old Linear nn.Module. Increasing the size will add newly initialized
         vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
@@ -748,7 +750,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 vocab_size` else `vocab_size, lm_head_dim`.
 
         Return:
-            `nn.Dense`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
+            `nn.Dense`: Pointer to the resized Linear nn.Module or the old Linear nn.Module if `new_num_tokens` is
             `None`
         """
         if new_num_tokens is None:
@@ -778,7 +780,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         # to errors when training.
         new_lm_head = nn.Dense(
             *new_lm_head_shape,
-            has_bias=has_new_lm_head_bias,
+            bias=has_new_lm_head_bias,
         )
 
         # initialize new lm head (in particular added tokens)
@@ -800,8 +802,8 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
         
         Args:
             self (PreTrainedModel): The instance of the PreTrainedModel class.
-            new_lm_head (torch.nn.Module): The resized language model head to be copied into.
-            old_lm_head (torch.nn.Module): The original language model head to be copied from.
+            new_lm_head (torch.nn.nn.Module): The resized language model head to be copied into.
+            old_lm_head (torch.nn.nn.Module): The original language model head to be copied from.
             num_tokens_to_copy (int): The number of tokens to copy from the original language model head.
             transposed (bool): Whether the weight tensor of the new language model head is transposed.
             has_new_lm_head_bias (bool): Whether the new language model head has a bias tensor.
@@ -1121,7 +1123,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     origin_state_dict = load_file(resolved_archive_file)
                     if use_fp16:
                         logger.warning_once("MindSpore do not support bfloat16 dtype, we will automaticlly convert to float16")
-                    state_dict = {k: Parameter(Tensor.from_numpy(v.astype(usage_dtype))) for k, v in origin_state_dict.items()}
+                    state_dict = {k: Tensor(v.astype(usage_dtype)) for k, v in origin_state_dict.items()}
                 else:
                     state_dict = load(resolved_archive_file)
             else:
@@ -1133,14 +1135,14 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     ) from exc
 
             state_keys = list(state_dict.keys())
+
             for key in state_keys:
                 new_key = key.replace('gamma', 'weight').replace('beta', 'bias').replace('embedding_table', 'weight')
                 if new_key != key:
                     state_dict[new_key] = state_dict.pop(key)
             return state_dict
 
-        keys_missing = list(model.parameters_dict().keys())
-        param_id_set = set()
+        keys_missing = list(model.state_dict().keys())
 
         use_keep_in_fp32_modules = False
         if model._keep_in_fp32_modules:
@@ -1157,7 +1159,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     non_missing_keys.append(key)
             return non_missing_keys
 
-        def load_param_into_net(model: nn.Cell, param_dict: dict, prefix: str, dtype_group: dict = None):
+        def load_param_into_net(model: nn.Module, param_dict: dict, prefix: str, dtype_group: dict = None):
             state_dict_keys = list(param_dict.keys())
             keep_in_fp32_modules = model._keep_in_fp32_modules
             keys_unexpected = list(param_dict.keys())
@@ -1170,7 +1172,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
             remove_prefix_from_model = not has_prefix_module and expects_prefix_module
             add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
-            for pname_in_net, param in model.parameters_and_names():
+            for pname_in_net, param in model.state_dict().items():
                 if add_prefix_to_model:
                     param_name = prefix + '.' + pname_in_net
                 elif remove_prefix_from_model:
@@ -1178,11 +1180,11 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                 else:
                     param_name = pname_in_net
 
-                if param.uuid in param_id_set:
-                    # for tied params
-                    if param_name in keys_unexpected:
-                        keys_unexpected.remove(param_name)
-                    continue
+                # if param.uuid in param_id_set:
+                #     # for tied params
+                #     if param_name in keys_unexpected:
+                #         keys_unexpected.remove(param_name)
+                #     continue
 
                 new_param = param_dict.pop(param_name, None)
 
@@ -1193,13 +1195,12 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                         break
 
                 if new_param is not None:
-                    use_replace = False
                     if new_param.shape != param.shape:
                         if not ignore_mismatched_sizes:
-                            raise RuntimeError(f'The shape of parameter `{param.name} is {param.shape}, but got mismatch parameter'
+                            raise RuntimeError(f'The shape of parameter `{pname_in_net} is {param.shape}, but got mismatch parameter'
                                             f' `{param_name} with shape {new_param.shape} in checkpoint, '
                                             f'\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method.')
-                        logger.warning(f'The shape of parameter `{param.name} is {param.shape}, but got mismatch parameter'
+                        logger.warning(f'The shape of parameter `{pname_in_net} is {param.shape}, but got mismatch parameter'
                                         f' `{param_name} with shape {new_param.shape} in checkpoint, ')
                         continue
 
@@ -1211,26 +1212,15 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
                     elif ms_dtype and param.dtype in (mindspore.float32, mindspore.float16):
                         new_param = new_param.astype(ms_dtype)
 
-                    if new_param.dtype != param.dtype or new_param.shape != param.shape:
-                        use_replace = True
-
-                    if use_replace:
-                        if isinstance(new_param, Parameter):
-                            new_param.name = param.name
-                            new_param.requires_grad = param.requires_grad
-                            replace_references(param, new_param)
-                        else:
-                            replace_references(param, Parameter(new_param, requires_grad=param.requires_grad, name=param.name))
-                    else:
-                        param.set_data(new_param)
+                    param.copy_(new_param)
                     keys_unexpected.remove(param_name)
                     keys_missing.remove(pname_in_net)
-                    param_id_set.add(param.uuid)
+                    # param_id_set.add(param.uuid)
                 else:
                     # fix missing value parameter dtype cast.
                     if ms_dtype and ms_dtype != param.dtype:
                         new_param = param.astype(ms_dtype)
-                        replace_references(param, Parameter(new_param, name=param.name, requires_grad=param.requires_grad))
+                        param.copy_(new_param)
 
             # NOTE: monkey patching weight_norm
             for key in fix_weight_norm_missing_keys(state_dict_keys, keys_missing):
@@ -1395,28 +1385,6 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
 
             logger.warning(warn_string)
 
-    def parameters_and_names(self, name_prefix='', expand=True):
-        """
-        fix ignore tied weights
-        """
-        cells = []
-        if expand:
-            cells = self.cells_and_names(name_prefix=name_prefix)
-        else:
-            cells.append((name_prefix, self))
-
-        for cell_name, cell in cells:
-            params = cell._params.items()
-            for par_name, par in params:
-                if par is not None and par.inited_param is not None:
-                    par = par.inited_param
-                if par is not None:
-                    par_new_name = par_name
-                    if cell_name:
-                        par_new_name = cell_name + '.' + par_new_name
-
-                    yield par_new_name, par
-
     def num_parameters(self, only_trainable=False):
         """return parameters count"""
         total = 0
@@ -1521,7 +1489,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
 
         # Save the model
         if state_dict is None:
-            state_dict = model_to_save.parameters_dict()
+            state_dict = model_to_save.state_dict()
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
@@ -1603,7 +1571,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin, PeftAdapterMixin)
             This method does not raise any exceptions.
         """
 
-def get_parameter_dtype(parameter: Union[nn.Cell, GenerationMixin, "ModuleUtilsMixin"]):
+def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "nn.ModuleUtilsMixin"]):
     """
     Returns the first found floating dtype in parameters if there is one, otherwise returns the last dtype it found.
     """
@@ -1738,7 +1706,7 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-class PoolerStartLogits(nn.Cell):
+class PoolerStartLogits(nn.Module):
     """
     Compute SQuAD start logits from sequence hidden states.
 
@@ -1790,7 +1758,7 @@ class PoolerStartLogits(nn.Cell):
         return x
 
 
-class PoolerEndLogits(nn.Cell):
+class PoolerEndLogits(nn.Module):
     """
     Compute SQuAD end logits from sequence hidden states.
 
@@ -1873,7 +1841,7 @@ class PoolerEndLogits(nn.Cell):
         return x
 
 
-class PoolerAnswerClass(nn.Cell):
+class PoolerAnswerClass(nn.Module):
     """
     Compute SQuAD 2.0 answer class from classification and start tokens hidden states.
 
@@ -1982,7 +1950,7 @@ class SquadHeadOutput(ModelOutput):
     cls_logits: Optional[mindspore.Tensor] = None
 
 
-class SQuADHead(nn.Cell):
+class SQuADHead(nn.Module):
     r"""
     A SQuAD head inspired by XLNet.
 
@@ -2106,7 +2074,7 @@ class SQuADHead(nn.Cell):
         )
 
 
-class SequenceSummary(nn.Cell):
+class SequenceSummary(nn.Module):
     """
     GPTDoubleHeadsModel and GPT2DoubleHeadsModel class that self.multiple_choice_head
     """

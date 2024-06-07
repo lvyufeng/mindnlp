@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-# pylint: disable=unexpected-keyword-arg
 """ MindSpore ALIGN model."""
 
 import math
@@ -23,9 +22,11 @@ from functools import partial
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
-from mindspore.common.initializer import initializer, Normal, XavierUniform
+from mindspore import ops
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal, XavierUniform
 from mindnlp.utils import (
     ModelOutput,
     logging,
@@ -224,7 +225,7 @@ def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetEmbeddings with EfficientNet->AlignVision
-class AlignVisionEmbeddings(nn.Cell):
+class AlignVisionEmbeddings(nn.Module):
     r"""
     A module that corresponds to the stem module of the original work.
     """
@@ -254,7 +255,7 @@ an object of type AlignVisionConfig.
             - kernel size of 3
             - stride of 2
             - pad_mode set to 'valid'
-            - has_bias set to False
+            - bias set to False
         The 'self.batchnorm' attribute is set to an instance of nn.BatchNorm2d with the following parameters:
             - 'self.out_dim' as the number of channels
             - 'config.batch_norm_eps' as the epsilon value for numerical stability
@@ -268,7 +269,7 @@ an object of type AlignVisionConfig.
         self.out_dim = round_filters(config, 32)
         self.padding = nn.ZeroPad2d(padding=(0, 1, 0, 1))
         self.convolution = nn.Conv2d(
-            config.num_channels, self.out_dim, kernel_size=3, stride=2, pad_mode="valid", has_bias=False
+            config.num_channels, self.out_dim, kernel_size=3, stride=2, padding="valid", bias=False
         )
         self.batchnorm = nn.BatchNorm2d(self.out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
@@ -304,27 +305,6 @@ an object of type AlignVisionConfig.
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseConv2d with EfficientNet->AlignVision
 class AlignVisionDepthwiseConv2d(nn.Conv2d):
-
-    """
-    Represents a depthwise convolutional layer for aligning vision data in 2D space. This class inherits from nn.Conv2d.
-    
-    This class initializes a depthwise convolutional layer for aligning vision data in 2D space. It allows for specifying the number of input channels, depth multiplier, kernel size, stride, padding, dilation,
-whether to include bias, and the padding mode. The depthwise convolutional layer applies a different kernel to each input channel, producing an output with the same number of channels.
-    
-    Parameters:
-    - in_channels (int): Number of channels in the input image data.
-    - depth_multiplier (int, optional): Multiplication factor for the number of output channels. Default is 1.
-    - kernel_size (int or tuple, optional): Size of the convolutional kernel. Default is 3.
-    - stride (int or tuple, optional): Stride of the convolution. Default is 1.
-    - padding (int or tuple, optional): Zero-padding added to both sides of the input. Default is 0.
-    - dilation (int or tuple, optional): Spacing between kernel elements. Default is 1.
-    - has_bias (bool, optional): Whether to include a bias term. Default is True.
-    - pad_mode (str, optional): Padding mode. Default is 'zeros'.
-    
-    Note:
-    The output_channels parameter is automatically calculated based on the input_channels and depth_multiplier.
-    
-    """
     def __init__(
         self,
         in_channels,
@@ -333,30 +313,9 @@ whether to include bias, and the padding mode. The depthwise convolutional layer
         stride=1,
         padding=0,
         dilation=1,
-        has_bias=True,
-        pad_mode="zeros",
+        bias=True,
+        padding_mode="zeros",
     ):
-        """
-        Initializes an instance of the AlignVisionDepthwiseConv2d class.
-        
-        Args:
-            self: The instance of the class.
-            in_channels (int): The number of input channels.
-            depth_multiplier (int, optional): The depth multiplier for the output channels. Defaults to 1.
-            kernel_size (int, optional): The size of the convolutional kernel. Defaults to 3.
-            stride (int, optional): The stride of the convolution operation. Defaults to 1.
-            padding (int, optional): The amount of padding to apply. Defaults to 0.
-            dilation (int, optional): The dilation rate for the convolution operation. Defaults to 1.
-            has_bias (bool, optional): Indicates whether bias should be included. Defaults to True.
-            pad_mode (str, optional): The padding mode to use. Defaults to 'zeros'.
-        
-        Returns:
-            None. This method does not return any value.
-        
-        Raises:
-            ValueError: If in_channels, depth_multiplier, kernel_size, stride, padding, or dilation is less than or equal to 0.
-            TypeError: If pad_mode is not a string.
-        """
         out_channels = in_channels * depth_multiplier
         super().__init__(
             in_channels=in_channels,
@@ -365,14 +324,14 @@ whether to include bias, and the padding mode. The depthwise convolutional layer
             stride=stride,
             padding=padding,
             dilation=dilation,
-            group=in_channels,
-            has_bias=has_bias,
-            pad_mode=pad_mode,
+            groups=in_channels,
+            bias=bias,
+            padding_mode=padding_mode,
         )
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetExpansionLayer with EfficientNet->AlignVision
-class AlignVisionExpansionLayer(nn.Cell):
+class AlignVisionExpansionLayer(nn.Module):
     r"""
     This corresponds to the expansion phase of each block in the original implementation.
     """
@@ -399,8 +358,8 @@ class AlignVisionExpansionLayer(nn.Cell):
             in_channels=in_dim,
             out_channels=out_dim,
             kernel_size=1,
-            pad_mode="same",
-            has_bias=False,
+            padding="same",
+            bias=False,
         )
         self.expand_bn = nn.BatchNorm2d(num_features=out_dim, eps=config.batch_norm_eps)
         self.expand_act = ACT2FN[config.hidden_act]
@@ -430,7 +389,7 @@ the height and width of the input feature map.
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with with EfficientNet->AlignVision
-class AlignVisionDepthwiseLayer(nn.Cell):
+class AlignVisionDepthwiseLayer(nn.Module):
     r"""
     This corresponds to the depthwise convolution phase of each block in the original implementation.
     """
@@ -465,7 +424,7 @@ class AlignVisionDepthwiseLayer(nn.Cell):
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=padding)
         self.depthwise_conv = AlignVisionDepthwiseConv2d(
-            in_dim, kernel_size=kernel_size, stride=stride, pad_mode=conv_pad, has_bias=False
+            in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
         self.depthwise_norm = nn.BatchNorm2d(
             num_features=in_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
@@ -498,7 +457,7 @@ class AlignVisionDepthwiseLayer(nn.Cell):
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with with EfficientNet->AlignVision
-class AlignVisionSqueezeExciteLayer(nn.Cell):
+class AlignVisionSqueezeExciteLayer(nn.Module):
     r"""
     This corresponds to the Squeeze and Excitement phase of each block in the original implementation.
     """
@@ -529,15 +488,13 @@ class AlignVisionSqueezeExciteLayer(nn.Cell):
             in_channels=self.dim,
             out_channels=self.dim_se,
             kernel_size=1,
-            pad_mode="same",
-            has_bias=True
+            padding="same",
         )
         self.expand = nn.Conv2d(
             in_channels=self.dim_se,
             out_channels=self.dim,
             kernel_size=1,
-            pad_mode="same",
-            has_bias=True
+            padding="same",
         )
         self.act_reduce = ACT2FN[config.hidden_act]
         self.act_expand = nn.Sigmoid()
@@ -570,7 +527,7 @@ class AlignVisionSqueezeExciteLayer(nn.Cell):
         return hidden_states
 
 
-class AlignVisionFinalBlockLayer(nn.Cell):
+class AlignVisionFinalBlockLayer(nn.Module):
     r"""
     This corresponds to the final phase of each block in the original implementation.
     """
@@ -601,8 +558,8 @@ class AlignVisionFinalBlockLayer(nn.Cell):
             in_channels=in_dim,
             out_channels=out_dim,
             kernel_size=1,
-            pad_mode="same",
-            has_bias=False,
+            padding="same",
+            bias=False,
         )
         self.project_bn = nn.BatchNorm2d(
             num_features=out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
@@ -634,7 +591,7 @@ class AlignVisionFinalBlockLayer(nn.Cell):
         return hidden_states
 
 
-class AlignVisionBlock(nn.Cell):
+class AlignVisionBlock(nn.Module):
     r"""
     This corresponds to the block module of original the EfficientNet vision encoder implementation.
 
@@ -753,7 +710,7 @@ function to combine the original 'embeddings' tensor and the processed hidden st
         return hidden_states
 
 
-class AlignVisionEncoder(nn.Cell):
+class AlignVisionEncoder(nn.Module):
     r"""
     Forward propogates the embeddings through each vision encoder (EfficientNet) block.
 
@@ -825,7 +782,7 @@ class AlignVisionEncoder(nn.Cell):
                 blocks.append(block)
                 curr_block_num += 1
 
-        self.blocks = nn.CellList(blocks)
+        self.blocks = nn.ModuleList(blocks)
 
     def construct(
         self,
@@ -865,7 +822,7 @@ class AlignVisionEncoder(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->AlignText
-class AlignTextEmbeddings(nn.Cell):
+class AlignTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
     def __init__(self, config):
         """
@@ -900,8 +857,12 @@ class AlignTextEmbeddings(nn.Cell):
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.position_ids = ops.arange(config.max_position_embeddings).expand((1, -1))
-        self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=mindspore.int64)
+        self.register_buffer(
+            "position_ids", ops.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+        self.register_buffer(
+            "token_type_ids", ops.zeros(self.position_ids.shape, dtype=mindspore.int64), persistent=False
+        )
 
     def construct(
         self,
@@ -963,12 +924,12 @@ class AlignTextEmbeddings(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->AlignText
-class AlignTextSelfAttention(nn.Cell):
+class AlignTextSelfAttention(nn.Module):
 
     """
     AlignTextSelfAttention
     
-    This class represents a self-attention module for aligning text. It is designed for use in neural network models and inherits from the nn.Cell class.
+    This class represents a self-attention module for aligning text. It is designed for use in neural network models and inherits from the nn.Module class.
     
     Attributes:
         num_attention_heads (int): The number of attention heads.
@@ -1206,7 +1167,7 @@ states. Default is None.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->AlignText
-class AlignTextSelfOutput(nn.Cell):
+class AlignTextSelfOutput(nn.Module):
 
     """
         A class representing the output of self-aligning text data.
@@ -1263,7 +1224,7 @@ class AlignTextSelfOutput(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText
-class AlignTextAttention(nn.Cell):
+class AlignTextAttention(nn.Module):
 
     """
     A class representing an align text attention mechanism for neural networks.
@@ -1271,7 +1232,7 @@ class AlignTextAttention(nn.Cell):
     This class implements an attention mechanism for aligning text sequences in neural networks. 
     It includes methods for initializing the attention mechanism, pruning attention heads, and constructing the attention output.
     
-    This class inherits from nn.Cell.
+    This class inherits from nn.Module.
     
     Attributes:
         - self: AlignTextSelfAttention
@@ -1395,12 +1356,12 @@ class AlignTextAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->AlignText
-class AlignTextIntermediate(nn.Cell):
+class AlignTextIntermediate(nn.Module):
 
     """
     Represents a neural network module for aligning text with intermediate processing steps.
     
-    This class inherits from nn.Cell and provides methods for initializing the module with configuration parameters
+    This class inherits from nn.Module and provides methods for initializing the module with configuration parameters
     and constructing the neural network with intermediate processing steps.
     
     The class includes an initialization method that sets up the dense layers based on the provided configuration.
@@ -1469,10 +1430,10 @@ class AlignTextIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->AlignText
-class AlignTextOutput(nn.Cell):
+class AlignTextOutput(nn.Module):
 
     """
-    AlignTextOutput class represents a neural network cell for aligning text output. This class inherits from nn.Cell and contains methods for initializing and constructing the align text output.
+    AlignTextOutput class represents a neural network cell for aligning text output. This class inherits from nn.Module and contains methods for initializing and constructing the align text output.
     
     Attributes:
         config (object): The configuration object for the align text output.
@@ -1544,12 +1505,12 @@ class AlignTextOutput(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->AlignText
-class AlignTextLayer(nn.Cell):
+class AlignTextLayer(nn.Module):
 
     """ 
     This class represents an AlignTextLayer for processing text sequences with attention mechanisms in a neural network model. 
     
-    This class inherits from nn.Cell and implements methods for initializing the layer, constructing the layer with attention mechanisms, and performing feed-forward chunk processing.
+    This class inherits from nn.Module and implements methods for initializing the layer, constructing the layer with attention mechanisms, and performing feed-forward chunk processing.
     
     Attributes:
         chunk_size_feed_forward (int): The chunk size used for feed-forward processing.
@@ -1715,10 +1676,10 @@ cross_attention_past_value)).
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->AlignText
-class AlignTextEncoder(nn.Cell):
+class AlignTextEncoder(nn.Module):
 
     """
-    This class represents an AlignTextEncoder that inherits from nn.Cell. 
+    This class represents an AlignTextEncoder that inherits from nn.Module. 
     
     The AlignTextEncoder initializes with a configuration and constructs the encoder layer with align text functionality. It supports gradient checkpointing during training and provides options to output
 hidden states, attentions, and cross-attentions. The encoder can handle various input tensors such as hidden states, attention masks, head masks, encoder hidden states, encoder attention masks, past key
@@ -1748,7 +1709,7 @@ optional outputs like next decoder cache, all hidden states, self-attentions, an
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([AlignTextLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([AlignTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def construct(
@@ -1861,12 +1822,12 @@ optional outputs like next decoder cache, all hidden states, self-attentions, an
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert -> AlignText
-class AlignTextPooler(nn.Cell):
+class AlignTextPooler(nn.Module):
 
     """
     AlignTextPooler
     
-    This class represents a text pooler that aligns the input hidden states and performs pooling operation. It inherits from the nn.Cell class.
+    This class represents a text pooler that aligns the input hidden states and performs pooling operation. It inherits from the nn.Module class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that maps the hidden states to a specific size.
@@ -1940,7 +1901,7 @@ class AlignPreTrainedModel(PreTrainedModel):
         if isinstance(cell, (nn.Dense, nn.Conv2d)):
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, AlignModel):
             cell.text_projection.weight.set_data(initializer(XavierUniform(), cell.text_projection.weight.shape,
@@ -2204,7 +2165,7 @@ with the specified axis and keep_dims parameters. If 'pooling_type' is set to 'm
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Retrieve the input embeddings from the AlignVisionModel.
         
@@ -2212,7 +2173,7 @@ with the specified axis and keep_dims parameters. If 'pooling_type' is set to 'm
             self (AlignVisionModel): The instance of the AlignVisionModel class.
             
         Returns:
-            nn.Cell: The input embeddings extracted from the vision model's convolution layer.
+            nn.Module: The input embeddings extracted from the vision model's convolution layer.
         
         Raises:
             None.
@@ -2349,7 +2310,7 @@ similarity scores.
         self.vision_model = AlignVisionModel(vision_config)
 
         self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim)
-        self.temperature = Parameter(mindspore.tensor([self.config.temperature_init_value]))
+        self.temperature = Parameter(mindspore.tensor(self.config.temperature_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()

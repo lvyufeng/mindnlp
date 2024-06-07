@@ -38,7 +38,8 @@ from ...test_modeling_common import (
 
 if is_mindspore_available():
     import mindspore
-    from mindspore import ops, nn
+    from mindspore import ops
+    from mindnlp.core import nn
 
     from mindnlp.transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
     from mindnlp.transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -157,7 +158,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Cell))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Dense))
 

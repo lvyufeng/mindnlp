@@ -17,10 +17,11 @@
 import inspect
 import tempfile
 import unittest
-
+import numpy as np
 from huggingface_hub import hf_hub_download
 
-from mindnlp.utils.testing_utils import is_mindspore_available
+from mindnlp.utils.testing_utils import is_mindspore_available, slow
+from mindnlp.utils.serialization import load
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -261,7 +262,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
         model_signature = inspect.signature(
-            getattr(AutoformerModel, "construct"))
+            getattr(AutoformerModel, "forward"))
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(AutoformerModel.main_input_name,
@@ -272,7 +273,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.construct)
+            signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -411,13 +412,13 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
 def prepare_batch(filename="train-batch.pt"):
     file = hf_hub_download(
         repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
-    batch = mindspore.load(file)
+    batch = load(file)
     return batch
 
 
 
 class AutoformerModelIntegrationTests(unittest.TestCase):
-    @unittest.skip('Mindspore cannot load torch .pt file.')
+    @slow
     def test_inference_no_head(self):
         model = AutoformerModel.from_pretrained(
             "huggingface/autoformer-tourism-monthly")
@@ -440,10 +441,10 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         expected_slice = mindspore.tensor(
             [[0.3593, -1.3398, 0.6330], [0.2279, 1.5396, -0.1792], [0.0450, 1.3225, -0.2335]]
         )
-        self.assertTrue(mindspore.allclose(
+        self.assertTrue(np.allclose(
             output[0, :3, :3].asnumpy(), expected_slice.asnumpy(), atol=TOLERANCE))
 
-    @unittest.skip('Mindspore cannot load torch .pt file.')
+    @slow
     def test_inference_head(self):
         model = AutoformerForPrediction.from_pretrained(
             "huggingface/autoformer-tourism-monthly")
@@ -460,10 +461,10 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         expected_slice = mindspore.tensor(
             [[-0.0734, -0.9036, 0.8358], [4.7186, 2.4113, 1.9581], [1.7953, 2.3558, 1.2970]]
         )
-        self.assertTrue(mindspore.allclose(
+        self.assertTrue(np.allclose(
             output[0, :3, :3].asnumpy(), expected_slice.asnumpy(), atol=TOLERANCE))
 
-    @unittest.skip('Mindspore cannot load torch .pt file.')
+    @slow
     def test_seq_to_seq_generation(self):
         model = AutoformerForPrediction.from_pretrained(
             "huggingface/autoformer-tourism-monthly")
@@ -481,5 +482,5 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         expected_slice = mindspore.tensor(
             [3130.6763, 4056.5293, 7053.0786])
         mean_prediction = outputs.sequences.mean(axis=1)
-        self.assertTrue(mindspore.allclose(
+        self.assertTrue(np.allclose(
             mean_prediction[0, -3:].asnumpy(), expected_slice.asnumpy(), rtol=1e-1))
