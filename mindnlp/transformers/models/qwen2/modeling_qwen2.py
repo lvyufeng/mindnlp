@@ -24,7 +24,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -77,10 +80,10 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
-class Qwen2RMSNorm(nn.Cell):
+class Qwen2RMSNorm(nn.Module):
 
     """
-    Qwen2RMSNorm is a custom normalization layer that inherits from nn.Cell. It is equivalent to T5LayerNorm and is designed to normalize the input hidden states.
+    Qwen2RMSNorm is a custom normalization layer that inherits from nn.Module. It is equivalent to T5LayerNorm and is designed to normalize the input hidden states.
     
     This class initializes with the specified hidden_size and an optional epsilon value for variance smoothing. The normalization process involves scaling the hidden states based on the calculated variance and
 the provided weight parameter.
@@ -98,7 +101,7 @@ weight parameter to produce the final output.
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the RMS normalization of hidden states.
         
@@ -122,10 +125,10 @@ weight parameter to produce the final output.
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Qwen2
-class Qwen2RotaryEmbedding(nn.Cell):
+class Qwen2RotaryEmbedding(nn.Module):
 
     """
-    Represents a Qwen2RotaryEmbedding module that inherits from nn.Cell. This module implements the Qwen2Rotary embedding as described in the code.
+    Represents a Qwen2RotaryEmbedding module that inherits from nn.Module. This module implements the Qwen2Rotary embedding as described in the code.
     
     Attributes:
         dim (int): The dimension of the embedding.
@@ -195,7 +198,7 @@ and stores it in the 'inv_freq' attribute. Additionally, it sets the cosine and 
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs the Qwen2RotaryEmbedding for the given input tensor 'x' and sequence length 'seq_len'.
         
@@ -260,11 +263,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2
-class Qwen2MLP(nn.Cell):
+class Qwen2MLP(nn.Module):
 
     """
     Qwen2MLP is a Python class that represents a multi-layer perceptron (MLP) with specific configurations for gate, up, and down projections.
-    This class inherits from nn.Cell and is designed to be used in neural network models for deep learning applications.
+    This class inherits from nn.Module and is designed to be used in neural network models for deep learning applications.
     
     Attributes:
         config: A configuration object containing settings for the hidden size and intermediate size of the MLP.
@@ -302,12 +305,12 @@ class Qwen2MLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a new object using the Qwen2MLP class.
         
@@ -341,7 +344,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Qwen2Attention(nn.Cell):
+class Qwen2Attention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -387,10 +390,10 @@ valid layer index when creating the class.
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=True)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = Qwen2RotaryEmbedding(
             self.head_dim,
@@ -398,7 +401,7 @@ valid layer index when creating the class.
             base=self.rope_theta,
         )
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -501,10 +504,10 @@ QWEN2_ATTENTION_CLASSES = {
 }
 
 
-class Qwen2DecoderLayer(nn.Cell):
+class Qwen2DecoderLayer(nn.Module):
 
     """
-    Qwen2DecoderLayer is a class representing a single layer of the Qwen2 decoder. It inherits from nn.Cell and contains methods for initializing the layer and constructing the layer's operations.
+    Qwen2DecoderLayer is a class representing a single layer of the Qwen2 decoder. It inherits from nn.Module and contains methods for initializing the layer and constructing the layer's operations.
     
     Attributes:
         hidden_size (int): The size of the hidden state.
@@ -552,7 +555,7 @@ output_attentions: Optional[bool] = False, use_cache: Optional[bool] = False, **
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -653,7 +656,7 @@ initializer function takes the following parameters:
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -697,7 +700,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [Qwen2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -742,7 +745,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -972,7 +975,7 @@ attention_mask, inputs_embeds, and additional keyword arguments as input and ret
         super().__init__(config)
         self.model = Qwen2Model(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1086,7 +1089,7 @@ attention_mask, inputs_embeds, and additional keyword arguments as input and ret
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1330,7 +1333,7 @@ specific usage instructions may be available in the official documentation or so
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen2Model(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1366,7 +1369,7 @@ specific usage instructions may be available in the official documentation or so
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

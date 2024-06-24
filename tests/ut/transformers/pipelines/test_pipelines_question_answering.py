@@ -332,7 +332,7 @@ Why should I use transformers?
 
 3. Choose the right framework for every part of a model's lifetime:
   - Train state-of-the-art models in 3 lines of code.
-  - Move a single model between TF2.0/PyTorch frameworks at will.
+  - Move a single model between TF2.0/MindSpore frameworks at will.
   - Seamlessly pick the right framework for training, evaluation and production.
 
 4. Easily customize a model or an example to your needs:
@@ -340,7 +340,7 @@ Why should I use transformers?
   - Model internals are exposed as consistently as possible.
   - Model files can be used independently of the library for quick experiments.
 
-🤗 Transformers is backed by the three most popular deep learning libraries — Jax, PyTorch and TensorFlow — with a seamless integration
+🤗 Transformers is backed by the three most popular deep learning libraries — Jax, MindSpore and TensorFlow — with a seamless integration
 between them. It's straightforward to train your models with one before loading them for inference with the other.
 """
         question = "Which deep learning libraries back 🤗 Transformers?"
@@ -348,7 +348,7 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+            {"answer": "Jax, MindSpore and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
         )
 
 

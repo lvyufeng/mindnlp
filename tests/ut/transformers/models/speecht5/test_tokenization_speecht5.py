@@ -175,7 +175,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
             "general-purpose architectures (BERT, GPT, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
             "Language Understanding (NLU) and Natural Language Generation (NLG) with over thirty-two pretrained "
-            "models in one hundred plus languages and deep interoperability between Jax, PyTorch and TensorFlow.",
+            "models in one hundred plus languages and deep interoperability between Jax, MindSpore and TensorFlow.",
             "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
             "conditioning on both left and right context in all layers.",
             "The quick brown fox jumps over the lazy dog.",

@@ -20,9 +20,11 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
 from mindspore.common.initializer import initializer, Normal
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindnlp.utils import logging
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
@@ -74,7 +76,7 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def construct(self, attention_mask: mindspore.Tensor, past_key_values_length: int = 0):
+    def forward(self, attention_mask: mindspore.Tensor, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         attention_mask = attention_mask.long()
 
@@ -88,7 +90,7 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BioGpt
-class BioGptAttention(nn.Cell):
+class BioGptAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -136,10 +138,10 @@ class BioGptAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -159,7 +161,7 @@ class BioGptAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -279,7 +281,7 @@ class BioGptAttention(nn.Cell):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class BioGptDecoderLayer(nn.Cell):
+class BioGptDecoderLayer(nn.Module):
 
     """
     This class represents a BioGptDecoderLayer, which is a component of a BioGptDecoder in a Transformer-based model. It performs the decoding operation on the input hidden states.
@@ -343,7 +345,7 @@ class BioGptDecoderLayer(nn.Cell):
         self.fc2 = nn.Dense(config.intermediate_size, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -422,7 +424,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -472,7 +474,7 @@ class BioGptModel(BioGptPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, self.embed_dim, self.padding_idx)
         self.embed_positions = BioGptLearnedPositionalEmbedding(config.max_position_embeddings, self.embed_dim)
 
-        self.layers = nn.CellList([BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.gradient_checkpointing = False
@@ -513,7 +515,7 @@ class BioGptModel(BioGptPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -712,7 +714,7 @@ given input parameters and returns the model output.
         super().__init__(config)
 
         self.biogpt = BioGptModel(config)
-        self.output_projection = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.output_projection = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -750,7 +752,7 @@ given input parameters and returns the model output.
         """
         self.output_projection = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -919,7 +921,7 @@ and actual labels, as well as handling optional parameters for caching, attentio
 
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -1020,12 +1022,12 @@ handles different problem types such as regression, single-label classification,
         super().__init__(config)
         self.num_labels = config.num_labels
         self.biogpt = BioGptModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

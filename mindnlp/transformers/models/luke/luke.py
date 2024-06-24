@@ -23,8 +23,9 @@ from typing import Callable, Optional, Tuple
 
 import mindspore
 import numpy as np
-from mindspore import nn
-from mindspore import ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal, initializer
 
 from ...modeling_utils import PreTrainedModel
@@ -32,7 +33,7 @@ from .luke_config import LukeConfig
 from ...activations import ACT2FN
 
 
-class LukeEmbeddings(nn.Cell):
+class LukeEmbeddings(nn.Module):
     """
     LukeEmbeddings
     """
@@ -61,7 +62,7 @@ class LukeEmbeddings(nn.Cell):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size, ], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
         # End copy
@@ -70,7 +71,7 @@ class LukeEmbeddings(nn.Cell):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-    def construct(
+    def forward(
             self,
             input_ids=None,
             token_type_ids=None,
@@ -133,7 +134,7 @@ class LukeEmbeddings(nn.Cell):
         return ops.broadcast_to(position_ids.unsqueeze(0), input_shape)
 
 
-class LukeEntityEmbeddings(nn.Cell):
+class LukeEntityEmbeddings(nn.Module):
     """
     LukeEntityEmbeddings
     """
@@ -158,15 +159,15 @@ class LukeEntityEmbeddings(nn.Cell):
 
         self.entity_embeddings = nn.Embedding(config.entity_vocab_size, config.entity_emb_size, padding_idx=0)
         if config.entity_emb_size != config.hidden_size:
-            self.entity_embedding_dense = nn.Dense(config.entity_emb_size, config.hidden_size, has_bias=False)
+            self.entity_embedding_dense = nn.Dense(config.entity_emb_size, config.hidden_size, bias=False)
 
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        self.layer_norm = nn.LayerNorm([config.hidden_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size, ], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
             self, entity_ids, position_ids, token_type_ids=None
     ):
         """
@@ -209,7 +210,7 @@ class LukeEntityEmbeddings(nn.Cell):
         return embeddings
 
 
-class LukeSelfAttention(nn.Cell):
+class LukeSelfAttention(nn.Module):
     """
     LukeSelfAttention
     """
@@ -270,7 +271,7 @@ class LukeSelfAttention(nn.Cell):
         input_x = input_x.view(*new_input_x_shape)
         return input_x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
             self,
             word_hidden_states,
             entity_hidden_states,
@@ -377,7 +378,7 @@ class LukeSelfAttention(nn.Cell):
         return outputs
 
 
-class LukeSelfOutput(nn.Cell):
+class LukeSelfOutput(nn.Module):
     """
     LukeSelfOutput
     """
@@ -400,10 +401,10 @@ class LukeSelfOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size, ], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: Tensor, input_tensor: Tensor) -> Tensor:
+    def forward(self, hidden_states: Tensor, input_tensor: Tensor) -> Tensor:
         """
         Constructs the output of the self-attention layer in the Luke model.
         
@@ -427,7 +428,7 @@ class LukeSelfOutput(nn.Cell):
         return hidden_states
 
 
-class LukeAttention(nn.Cell):
+class LukeAttention(nn.Module):
     """
     LukeAttention
     """
@@ -456,7 +457,7 @@ class LukeAttention(nn.Cell):
         """
         raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
-    def construct(
+    def forward(
             self,
             word_hidden_states,
             entity_hidden_states,
@@ -515,7 +516,7 @@ class LukeAttention(nn.Cell):
         return outputs
 
 
-class LukeIntermediate(nn.Cell):
+class LukeIntermediate(nn.Module):
     """
     LukeIntermediate
     """
@@ -544,7 +545,7 @@ class LukeIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: Tensor) -> Tensor:
+    def forward(self, hidden_states: Tensor) -> Tensor:
         """
         Constructs the intermediate hidden states in the LukeIntermediate class.
         
@@ -568,7 +569,7 @@ resulting intermediate hidden states are returned as a Tensor.
         return hidden_states
 
 
-class LukeOutput(nn.Cell):
+class LukeOutput(nn.Module):
     """
     LukeOutput
     """
@@ -594,10 +595,10 @@ class LukeOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size, ], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: Tensor, input_tensor: Tensor) -> Tensor:
+    def forward(self, hidden_states: Tensor, input_tensor: Tensor) -> Tensor:
         """
         Constructs the output tensor for the LukeOutput class.
         
@@ -630,7 +631,7 @@ class LukeOutput(nn.Cell):
         return hidden_states
 
 
-class LukeLayer(nn.Cell):
+class LukeLayer(nn.Module):
     """
     LukeOutput
     """
@@ -657,7 +658,7 @@ class LukeLayer(nn.Cell):
         self.intermediate = LukeIntermediate(config)
         self.output = LukeOutput(config)
 
-    def construct(
+    def forward(
             self,
             word_hidden_states,
             entity_hidden_states,
@@ -724,7 +725,7 @@ class LukeLayer(nn.Cell):
         return layer_output
 
 
-class LukeEncoder(nn.Cell):
+class LukeEncoder(nn.Module):
     """
     LukeEncoder
     """
@@ -743,10 +744,10 @@ class LukeEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([LukeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([LukeLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
             self,
             word_hidden_states,
             entity_hidden_states,
@@ -843,7 +844,7 @@ class LukeEncoder(nn.Cell):
         }
 
 
-class LukePooler(nn.Cell):
+class LukePooler(nn.Module):
     """
     LukePooler
     """
@@ -868,7 +869,7 @@ class LukePooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: Tensor) -> Tensor:
+    def forward(self, hidden_states: Tensor) -> Tensor:
         """
         This method constructs a pooled output tensor based on the hidden states provided.
         
@@ -892,7 +893,7 @@ class LukePooler(nn.Cell):
         return pooled_output
 
 
-class EntityPredictionHeadTransform(nn.Cell):
+class EntityPredictionHeadTransform(nn.Module):
     """
     EntityPredictionHeadTransform
     """
@@ -920,9 +921,9 @@ class EntityPredictionHeadTransform(nn.Cell):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.layer_norm = nn.LayerNorm([config.entity_emb_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.entity_emb_size, ], eps=config.layer_norm_eps)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Method to construct the entity prediction head transformation.
         
@@ -946,7 +947,7 @@ class EntityPredictionHeadTransform(nn.Cell):
 
 
 # 0325==============================
-class EntityPredictionHead(nn.Cell):
+class EntityPredictionHead(nn.Module):
     """
     EntityPredictionHead
     """
@@ -971,10 +972,10 @@ class EntityPredictionHead(nn.Cell):
         super().__init__()
         self.config = config
         self.transform = EntityPredictionHeadTransform(config)
-        self.decoder = nn.Dense(config.entity_emb_size, config.entity_vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.entity_emb_size, config.entity_vocab_size, bias=False)
         self.bias = mindspore.Parameter(ops.zeros((config.entity_vocab_size,)))
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Method to construct the entity prediction head using the given hidden states.
         
@@ -1005,7 +1006,7 @@ class LukePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
-    def get_input_embeddings(self) -> "nn.Cell":
+    def get_input_embeddings(self) -> "nn.Module":
         """
         Method to retrieve the input embeddings for the LukePreTrainedModel.
         
@@ -1015,21 +1016,21 @@ class LukePreTrainedModel(PreTrainedModel):
                 It is used to access the attributes and methods associated with the instance.
         
         Returns:
-            nn.Cell: An object of type nn.Cell.
-                The return value is the input embeddings of the model stored in an nn.Cell object.
+            nn.Module: An object of type nn.Module.
+                The return value is the input embeddings of the model stored in an nn.Module object.
                 This object contains the embeddings that represent the input data for the model.
         
         Raises:
             None
         """
 
-    def set_input_embeddings(self, new_embeddings: "nn.Cell"):
+    def set_input_embeddings(self, new_embeddings: "nn.Module"):
         """
         This method sets the input embeddings for the LukePreTrainedModel.
         
         Args:
             self (LukePreTrainedModel): The instance of the LukePreTrainedModel class.
-            new_embeddings (nn.Cell): The new input embeddings to be set for the model. It should be an instance of 'nn.Cell'.
+            new_embeddings (nn.Module): The new input embeddings to be set for the model. It should be an instance of 'nn.Module'.
         
         Returns:
             None: This method does not return any value.
@@ -1067,14 +1068,14 @@ class LukePreTrainedModel(PreTrainedModel):
             This method does not raise any exceptions.
         """
 
-    def _init_weights(self, cell: nn.Cell):
+    def _init_weights(self, cell: nn.Module):
         """Initialize the weights"""
         if isinstance(cell, nn.Dense):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             if cell.embedding_size == 1:  # embedding for bias parameters
@@ -1179,7 +1180,7 @@ class LukeModel(LukePreTrainedModel):
         """
         raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -1343,7 +1344,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     return incremental_indices.astype(mindspore.int64) + padding_idx
 
 
-class LukeLMHead(nn.Cell):
+class LukeLMHead(nn.Module):
     """LukeLMead"""
     def __init__(self, config):
         """
@@ -1365,13 +1366,13 @@ class LukeLMHead(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size, ], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size, ], eps=config.layer_norm_eps)
 
         self.decoder = nn.Dense(config.hidden_size, config.vocab_size)
         self.bias = mindspore.Parameter(ops.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         """
         Constructs the output of the LukeLMHead model by performing a series of operations on the input features.
         
@@ -1468,7 +1469,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         """set_output_embeddings"""
         self.lm_head.decoder = new_embeddings
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -1602,7 +1603,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.classifier = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -1708,9 +1709,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
 
         self.num_labels = config.num_labels
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
-        self.classifier = nn.Dense(config.hidden_size * 2, config.num_labels, has_bias=False)
+        self.classifier = nn.Dense(config.hidden_size * 2, config.num_labels, bias=False)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -1820,7 +1821,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.classifier = nn.Dense(config.hidden_size * 3, config.num_labels)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask=None,
@@ -1941,7 +1942,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
 
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -2071,7 +2072,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
                                   )
         self.classifier = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -2175,7 +2176,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
         self.luke = LukeModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,
@@ -2309,7 +2310,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
                                   )
         self.classifier = nn.Dense(config.hidden_size, 1)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[Tensor] = None,
             attention_mask: Optional[Tensor] = None,

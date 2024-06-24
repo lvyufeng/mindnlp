@@ -578,7 +578,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.

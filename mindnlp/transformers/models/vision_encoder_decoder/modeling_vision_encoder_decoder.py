@@ -17,7 +17,9 @@
 from typing import Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindnlp.utils import logging
 
 from ...configuration_utils import PretrainedConfig
@@ -205,7 +207,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
                       this case, `from_tf` should be set to `True` and a configuration object should be provided as
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      MindSpore model using the provided conversion scripts and loading the MindSpore model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the text decoder. Can be either:
@@ -216,7 +218,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
                       this case, `from_tf` should be set to `True` and a configuration object should be provided as
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      MindSpore model using the provided conversion scripts and loading the MindSpore model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaning positional arguments will be passed to the underlying model's `__init__` method.
@@ -330,7 +332,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         config.tie_word_embeddings = False
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         decoder_input_ids: Optional[mindspore.Tensor] = None,

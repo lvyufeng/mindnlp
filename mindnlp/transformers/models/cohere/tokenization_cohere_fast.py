@@ -461,7 +461,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
                 - `'tf'`: Return TensorFlow `tf.Tensor` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
@@ -609,7 +609,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
                 - `'tf'`: Return TensorFlow `tf.Tensor` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):

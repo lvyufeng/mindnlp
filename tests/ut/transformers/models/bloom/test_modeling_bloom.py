@@ -492,7 +492,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # these generations match those of the PyTorch model
+        # these generations match those of the MindSpore model
         EXPECTED_GENERATIONS = [
             "Hello what is the best way to get the data from the database? I have tried",
             "Running a quick test with the following code, it works fine:\n$(document).ready(",

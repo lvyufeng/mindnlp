@@ -36,7 +36,7 @@ from ..tuners_utils import (
 class LoKrLayer(nn.Cell, BaseTunerLayer):
 
     r"""
-    LoKrLayer is a custom PyTorch class representing a layer that implements the Locally Kroneckerized Neural Network adaptation technique. This technique allows for adaptive modifications to be made on top of
+    LoKrLayer is a custom MindSpore class representing a layer that implements the Locally Kroneckerized Neural Network adaptation technique. This technique allows for adaptive modifications to be made on top of
 the base layer's output. The class provides methods for creating, updating, merging, unmerging, and managing adaptive layers within the network.
     
     Attributes:
@@ -75,7 +75,7 @@ the base layer's output. The class provides methods for creating, updating, merg
         - construct: Method to construct the output of the layer with adaptive modifications applied.
     
     Note:
-        This class is intended for advanced neural network adaptation techniques and should be used in conjunction with PyTorch's nn.Module functionalities.
+        This class is intended for advanced neural network adaptation techniques and should be used in conjunction with MindSpore's nn.Module functionalities.
     """
     other_param_names = ("r", "alpha", "scaling", "rank_dropout", "cell_dropout")
     # All names of layers that may contain adapter weights

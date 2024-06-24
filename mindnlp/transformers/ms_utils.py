@@ -18,10 +18,10 @@ import inspect
 from typing import Union, Optional, List, Tuple
 
 import mindspore
-from mindspore import ops, Parameter
-from mindspore.common.initializer import initializer, Normal
 
-from mindnlp.core import nn
+from mindnlp.core.nn import Parameter
+from mindnlp.core import nn, ops
+from mindnlp.core.nn.init import initializer, Normal
 from mindnlp._legacy.nn import Matmul
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]

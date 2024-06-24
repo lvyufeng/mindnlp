@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-""" Testing suite for the PyTorch ConvBERT model. """
+""" Testing suite for the MindSpore ConvBERT model. """
 import unittest
 
 from mindnlp.transformers import ConvBertConfig, get_values

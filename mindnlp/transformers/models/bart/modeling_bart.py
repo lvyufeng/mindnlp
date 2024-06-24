@@ -21,9 +21,11 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
 from mindnlp.utils import logging
 from mindnlp.modules.functional import finfo
 from ...activations import ACT2FN
@@ -121,17 +123,17 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def construct(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
+    def forward(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids.shape[:2]
         positions = ops.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=mindspore.int64
         ).expand(bsz, -1)
 
-        return super().construct(positions + self.offset)
+        return super().forward(positions + self.offset)
 
 
-class BartAttention(nn.Cell):
+class BartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -177,10 +179,10 @@ class BartAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -200,7 +202,7 @@ class BartAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -325,7 +327,7 @@ BART_ATTENTION_CLASSES = {
 }
 
 
-class BartEncoderLayer(nn.Cell):
+class BartEncoderLayer(nn.Module):
 
     '''
     BartEncoderLayer represents a single layer of the BART (Bidirectional and Auto-Regressive Transformers) encoder. This layer consists of multi-head self-attention mechanism followed by feed-forward neural
@@ -393,7 +395,7 @@ activation_dropout, and encoder_ffn_dim.
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm([self.embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -444,7 +446,7 @@ activation_dropout, and encoder_ffn_dim.
         return outputs
 
 
-class BartDecoderLayer(nn.Cell):
+class BartDecoderLayer(nn.Module):
 
     """
     This class represents a BART decoder layer used in natural language processing tasks. The BARTDecoderLayer class implements the decoder layer architecture for the BART (Bidirectional and Auto-Regressive
@@ -530,7 +532,7 @@ Transformers) model.
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm([self.embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -620,7 +622,7 @@ Transformers) model.
         return outputs
 
 
-class BartClassificationHead(nn.Cell):
+class BartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
     def __init__(
         self,
@@ -650,7 +652,7 @@ class BartClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=pooler_dropout)
         self.out_proj = nn.Dense(inner_dim, num_classes)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the BartClassificationHead by processing the hidden states input.
         
@@ -710,7 +712,7 @@ methods for initializing weights and generating dummy inputs for the model.
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(std), cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -791,7 +793,7 @@ class BartEncoder(BartPreTrainedModel):
             config.max_position_embeddings,
             embed_dim,
         )
-        self.layers = nn.CellList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm([embed_dim])
 
         self.gradient_checkpointing = False
@@ -833,7 +835,7 @@ class BartEncoder(BartPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1000,7 +1002,7 @@ class BartDecoder(BartPreTrainedModel):
             config.max_position_embeddings,
             config.d_model,
         )
-        self.layers = nn.CellList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.layernorm_embedding = nn.LayerNorm([config.d_model])
 
@@ -1039,7 +1041,7 @@ class BartDecoder(BartPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1388,7 +1390,7 @@ decoder embeddings.
         """
         return self.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1531,8 +1533,8 @@ setting and getting output embeddings and resizing final logits bias. The class 
         """
         super().__init__(config)
         self.model = BartModel(config)
-        self.final_logits_bias = ops.zeros((1, self.model.shared.vocab_size))
-        self.lm_head = nn.Dense(config.d_model, self.model.shared.vocab_size, has_bias=False)
+        self.final_logits_bias = ops.zeros((1, self.model.shared.num_embeddings))
+        self.lm_head = nn.Dense(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1651,7 +1653,7 @@ setting and getting output embeddings and resizing final logits bias. The class 
         """
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1886,7 +1888,7 @@ BART models for sequence classification applications.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2055,7 +2057,7 @@ decoder_inputs_embeds, use_cache, output_attentions, output_hidden_states, retur
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2173,7 +2175,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
         super().__init__(config)
         self.decoder = BartDecoder(config)
 
-    def construct(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Constructs a decoder wrapper instance.
         
@@ -2242,7 +2244,7 @@ dictionary containing the prepared inputs.
         super().__init__(config)
         self.model = BartDecoderWrapper(config)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2365,7 +2367,7 @@ dictionary containing the prepared inputs.
         """
         return self.model.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

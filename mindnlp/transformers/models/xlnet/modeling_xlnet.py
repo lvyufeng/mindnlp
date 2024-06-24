@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch XLNet model.
+ MindSpore XLNet model.
 """
 import warnings
 from dataclasses import dataclass
@@ -24,7 +24,10 @@ import numpy as np
 from mindspore.common.initializer import initializer, Normal
 
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from mindnlp. transformers. ms_utils import apply_chunking_to_forward
@@ -45,7 +48,7 @@ XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class XLNetRelativeAttention(nn.Cell):
+class XLNetRelativeAttention(nn.Module):
 
     """This class represents the relative attention mechanism used in XLNet model for sequence processing tasks.
     
@@ -78,7 +81,7 @@ attention heads, shifting for relative attention score calculation, and processi
         - construct(self, h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None, output_attentions=False): Method for constructing the attention mechanism with optional
 outputs.
     
-    Note: This class inherits from nn.Cell, which is a base class for neural network cells in the MindSpore framework.
+    Note: This class inherits from nn.Module, which is a base class for neural network cells in the MindSpore framework.
     """
     def __init__(self, config):
         '''
@@ -123,7 +126,7 @@ outputs.
         self.r_w_bias = Parameter(ops.zeros((self.n_head, self.d_head), dtype=mindspore.float32))
         self.seg_embed = Parameter(ops.zeros((2, self.n_head, self.d_head), dtype=mindspore.float32))
 
-        self.layer_norm = nn.LayerNorm(config.d_model, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.dropout)
 
     def prune_heads(self, heads):
@@ -259,7 +262,7 @@ outputs.
 
         return output
 
-    def construct(
+    def forward(
             self,
             h,
             g,
@@ -418,10 +421,10 @@ outputs.
         return outputs
 
 
-class XLNetFeedForward(nn.Cell):
+class XLNetFeedForward(nn.Module):
 
     """
-    XLNetFeedForward is a class that represents a feed-forward neural network layer for the XLNet model. It inherits from nn.Cell and contains methods for initializing and constructing the feed-forward layer.
+    XLNetFeedForward is a class that represents a feed-forward neural network layer for the XLNet model. It inherits from nn.Module and contains methods for initializing and constructing the feed-forward layer.
     
     The __init__ method initializes the XLNetFeedForward object with the given configuration. It sets up the layer normalization, dense layers, dropout, and activation function based on the configuration
 parameters.
@@ -469,7 +472,7 @@ a string, it is looked up in the ACT2FN mapping, which maps activation function 
         - The 'config.ff_activation' parameter can be either a string or a custom activation function.
         """
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.d_model, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.layer_1 = nn.Dense(config.d_model, config.d_inner)
         self.layer_2 = nn.Dense(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(p=config.dropout)
@@ -478,7 +481,7 @@ a string, it is looked up in the ACT2FN mapping, which maps activation function 
         else:
             self.activation_function = config.ff_activation
 
-    def construct(self, inp):
+    def forward(self, inp):
         """
         Constructs the XLNet feed-forward layer.
         
@@ -513,12 +516,12 @@ a string, it is looked up in the ACT2FN mapping, which maps activation function 
         return output
 
 
-class XLNetLayer(nn.Cell):
+class XLNetLayer(nn.Module):
 
     """
     Represents a layer of the XLNet model. This class includes methods for initializing the layer, constructing the layer's output, and applying chunking to the forward pass.
     
-    This class inherits from the nn.Cell class.
+    This class inherits from the nn.Module class.
     
     Attributes:
         rel_attn: XLNetRelativeAttention
@@ -563,7 +566,7 @@ class XLNetLayer(nn.Cell):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
-    def construct(
+    def forward(
             self,
             output_h,
             output_g,
@@ -656,7 +659,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                              cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -988,7 +991,7 @@ flexible and efficient for handling different use cases and scenarios.
 
         self.word_embedding = nn.Embedding(config.vocab_size, config.d_model)
         self.mask_emb = mindspore.Parameter(ops.zeros((1, 1, config.d_model),dtype=mindspore.float32))
-        self.layer = nn.CellList([XLNetLayer(config) for _ in range(config.n_layer)])
+        self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(p=config.dropout)
 
         # Initialize weights and apply final processing
@@ -1200,7 +1203,7 @@ flexible and efficient for handling different use cases and scenarios.
 
         return pos_emb
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1486,7 +1489,7 @@ during beam search or beam sample generation.
         self.same_length = config.same_length
 
         self.transformer = XLNetModel(config)
-        self.lm_loss = nn.Dense(config.d_model, config.vocab_size, has_bias=True)
+        self.lm_loss = nn.Dense(config.d_model, config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1580,7 +1583,7 @@ during beam search or beam sample generation.
 
         return inputs
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1781,7 +1784,7 @@ Loss (BCEWithLogitsLoss) for multi-label classification.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1936,7 +1939,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -2032,7 +2035,7 @@ SequenceSummary modules for processing input data and generating model outputs. 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             token_type_ids: Optional[mindspore.Tensor] = None,
@@ -2170,7 +2173,7 @@ available, the tuple contains only the logits and optional outputs.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -2311,7 +2314,7 @@ answer. Additionally, it provides functionality for handling optional masks of t
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,

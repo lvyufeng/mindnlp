@@ -22,7 +22,9 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, XavierUniform, HeNormal
 
 from mindnlp.utils import (
@@ -280,7 +282,7 @@ class EsmFoldLinear(nn.Dense):
         self,
         in_dim: int,
         out_dim: int,
-        has_bias: bool = True,
+        bias: bool = True,
         init: str = "default",
         init_fn: Optional[Callable[[mindspore.Tensor, mindspore.Tensor], None]] = None,
     ):
@@ -303,22 +305,22 @@ class EsmFoldLinear(nn.Dense):
             init_fn:
                 A custom initializer taking weight and bias as inputs. Overrides init if not None.
         """
-        super().__init__(in_dim, out_dim, has_bias=has_bias)
+        super().__init__(in_dim, out_dim, bias=bias)
 
         self.init = init
         self.init_fn = init_fn
-        if has_bias:
+        if bias:
             self.bias.set_data(ops.zeros_like(self.bias))
 
         if init not in ["default", "relu", "glorot", "gating", "normal", "final"]:
             raise ValueError("Invalid init string.")
 
 
-class EsmFoldLayerNorm(nn.Cell):
+class EsmFoldLayerNorm(nn.Module):
 
     """
     EsmFoldLayerNorm represents a custom layer normalization module with additional trainable parameters for weight and bias. 
-    This class inherits from nn.Cell and implements the Layer Normalization operation with custom weight and bias parameters.
+    This class inherits from nn.Module and implements the Layer Normalization operation with custom weight and bias parameters.
     
     Attributes:
         c_in (int): Number of input channels for the layer normalization operation.
@@ -363,7 +365,7 @@ class EsmFoldLayerNorm(nn.Cell):
         self.layer_norm = ops.LayerNorm(begin_norm_axis=-1,
                                         begin_params_axis=-1,
                                         epsilon=eps)
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a normalized layer using the EsmFold algorithm.
         
@@ -390,7 +392,7 @@ def softmax_no_cast(t: mindspore.Tensor, dim: int = -1) -> mindspore.Tensor:
     return s
 
 
-class EsmFoldAttention(nn.Cell):
+class EsmFoldAttention(nn.Module):
     """
     Standard multi-head attention using AlphaFold's default layer initialization. Allows multiple bias vectors.
     """
@@ -430,9 +432,9 @@ class EsmFoldAttention(nn.Cell):
         # DISCREPANCY: c_hidden is not the per-head channel dimension, as
         # stated in the supplement, but the overall channel dimension.
 
-        self.linear_q = EsmFoldLinear(self.c_q, self.c_hidden * self.no_heads, has_bias=False, init="glorot")
-        self.linear_k = EsmFoldLinear(self.c_k, self.c_hidden * self.no_heads, has_bias=False, init="glorot")
-        self.linear_v = EsmFoldLinear(self.c_v, self.c_hidden * self.no_heads, has_bias=False, init="glorot")
+        self.linear_q = EsmFoldLinear(self.c_q, self.c_hidden * self.no_heads, bias=False, init="glorot")
+        self.linear_k = EsmFoldLinear(self.c_k, self.c_hidden * self.no_heads, bias=False, init="glorot")
+        self.linear_v = EsmFoldLinear(self.c_v, self.c_hidden * self.no_heads, bias=False, init="glorot")
         self.linear_o = EsmFoldLinear(self.c_hidden * self.no_heads, self.c_q, init="final")
 
         self.linear_g = None
@@ -513,7 +515,7 @@ class EsmFoldAttention(nn.Cell):
 
         return o
 
-    def construct(
+    def forward(
         self,
         q_x: mindspore.Tensor,
         kv_x: mindspore.Tensor,
@@ -535,10 +537,10 @@ class EsmFoldAttention(nn.Cell):
                 List of biases that broadcast to [*, H, Q, K]
             use_memory_efficient_kernel:
                 Whether to use a custom memory-efficient attention kernel. This should be the default choice for most.
-                If none of the "use_<...>" flags are True, a stock PyTorch implementation is used instead
+                If none of the "use_<...>" flags are True, a stock MindSpore implementation is used instead
             use_lma:
                 Whether to use low-memory attention (Staats & Rabe 2021). If none of the "use_<...>" flags are True, a
-                stock PyTorch implementation is used instead
+                stock MindSpore implementation is used instead
             lma_q_chunk_size:
                 Query chunk size (for LMA)
             lma_kv_chunk_size:
@@ -577,12 +579,12 @@ class EsmFoldAttention(nn.Cell):
         return output
 
 
-class EsmFoldTriangleAttention(nn.Cell):
+class EsmFoldTriangleAttention(nn.Module):
 
     """
     This class represents an attention mechanism called EsmFoldTriangleAttention, which is used in the ESMFold model. It is designed to calculate attention weights between pairs of elements in a tensor. 
     
-    The EsmFoldTriangleAttention class inherits from the nn.Cell class and has the following attributes:
+    The EsmFoldTriangleAttention class inherits from the nn.Module class and has the following attributes:
     
     Attributes:
         c_in: 
@@ -632,7 +634,7 @@ class EsmFoldTriangleAttention(nn.Cell):
 
         self.layer_norm = nn.LayerNorm(self.c_in)
 
-        self.linear = EsmFoldLinear(c_in, self.no_heads, has_bias=False, init="normal")
+        self.linear = EsmFoldLinear(c_in, self.no_heads, bias=False, init="normal")
 
         self.mha = EsmFoldAttention(self.c_in, self.c_in, self.c_in, self.c_hidden, self.no_heads)
 
@@ -660,7 +662,7 @@ class EsmFoldTriangleAttention(nn.Cell):
             _out=x if inplace_safe else None,
         )
 
-    def construct(
+    def forward(
         self,
         x: mindspore.Tensor,
         mask: Optional[mindspore.Tensor] = None,
@@ -720,7 +722,7 @@ class EsmFoldTriangleAttention(nn.Cell):
         return x
 
 
-class EsmFoldTriangleMultiplicativeUpdate(nn.Cell):
+class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
     """
     Implements Algorithms 11 and 12.
     """
@@ -1025,7 +1027,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Cell):
 
         return z
 
-    def construct(
+    def forward(
         self,
         z: mindspore.Tensor,
         mask: Optional[mindspore.Tensor] = None,
@@ -1094,7 +1096,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                 cell.weight.set_data(initializer(XavierUniform(), cell.weight.shape, cell.weight.dtype))
             elif cell.init == "gating":
                 cell.weight[:] = 0
-                if cell.bias:
+                if cell.bias is not None:
                     cell.bias[:] = 1
             elif cell.init == "normal":
                 cell.weight.set_data(initializer(HeNormal(nonlinearity="linear"), cell.weight.shape, cell.weight.dtype))
@@ -1125,7 +1127,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
             super()._init_weights(cell)
 
 
-class EsmFoldSelfAttention(nn.Cell):
+class EsmFoldSelfAttention(nn.Module):
 
     """
     This class represents a self-attention mechanism for processing sequences, specifically designed for handling sequences of varying lengths. 
@@ -1186,8 +1188,8 @@ class EsmFoldSelfAttention(nn.Cell):
         self.num_heads = num_heads
         self.head_width = head_width
 
-        self.proj = nn.Dense(embed_dim, embed_dim * 3, has_bias=False)
-        self.o_proj = nn.Dense(embed_dim, embed_dim, has_bias=True)
+        self.proj = nn.Dense(embed_dim, embed_dim * 3, bias=False)
+        self.o_proj = nn.Dense(embed_dim, embed_dim, bias=True)
         self.gated = gated
         if gated:
             self.g_proj = nn.Dense(embed_dim, embed_dim)
@@ -1198,7 +1200,7 @@ class EsmFoldSelfAttention(nn.Cell):
 
         self.o_proj.bias.set_data(ops.zeros_like(self.o_proj.bias))
 
-    def construct(self, x, mask=None, bias=None, indices=None):
+    def forward(self, x, mask=None, bias=None, indices=None):
         """
         Basic self attention with optional mask and external pairwise bias. To handle sequences of different lengths,
         use mask.
@@ -1238,7 +1240,7 @@ class EsmFoldSelfAttention(nn.Cell):
         return y, a.permute(0, 3, 1, 2)
 
 
-class EsmFoldDropout(nn.Cell):
+class EsmFoldDropout(nn.Module):
     """
     Implementation of dropout with the ability to share the dropout mask along a particular dimension.
     """
@@ -1265,7 +1267,7 @@ class EsmFoldDropout(nn.Cell):
         self.batch_dim = batch_dim
         self.dropout = nn.Dropout(p=self.r)
 
-    def construct(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, x: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a modified tensor with dropout for the EsmFoldDropout class.
         
@@ -1288,11 +1290,11 @@ class EsmFoldDropout(nn.Cell):
         return x * self.dropout(x.new_ones(shape))
 
 
-class EsmFoldSequenceToPair(nn.Cell):
+class EsmFoldSequenceToPair(nn.Module):
 
     """This class represents a neural network model for transforming sequence states into pairwise states using an attention mechanism.
     
-    This class inherits from nn.Cell and includes methods for initialization and constructing the pairwise states from sequence states.
+    This class inherits from nn.Module and includes methods for initialization and constructing the pairwise states from sequence states.
     
     Attributes:
         layernorm (nn.LayerNorm): A layer normalization module for normalizing the sequence state dimensions.
@@ -1343,12 +1345,12 @@ class EsmFoldSequenceToPair(nn.Cell):
         super().__init__()
 
         self.layernorm = nn.LayerNorm(sequence_state_dim)
-        self.proj = nn.Dense(sequence_state_dim, inner_dim * 2, has_bias=True)
-        self.o_proj = nn.Dense(2 * inner_dim, pairwise_state_dim, has_bias=True)
+        self.proj = nn.Dense(sequence_state_dim, inner_dim * 2, bias=True)
+        self.o_proj = nn.Dense(2 * inner_dim, pairwise_state_dim, bias=True)
         self.proj.bias.set_data(ops.zeros_like(self.proj.bias))
         self.o_proj.bias.set_data(ops.zeros_like(self.o_proj.bias))
 
-    def construct(self, sequence_state):
+    def forward(self, sequence_state):
         """
         Inputs:
           sequence_state: B x L x sequence_state_dim
@@ -1374,12 +1376,12 @@ class EsmFoldSequenceToPair(nn.Cell):
         return x
 
 
-class EsmFoldPairToSequence(nn.Cell):
+class EsmFoldPairToSequence(nn.Module):
 
     """
     EsmFoldPairToSequence class represents a neural network module for converting pairwise features to sequence features using self-attention mechanism.
     
-    This class inherits from nn.Cell and includes methods for initializing the module and constructing the forward pass.
+    This class inherits from nn.Module and includes methods for initializing the module and constructing the forward pass.
     
     Attributes:
         pairwise_state_dim (int): Dimension of the pairwise state features.
@@ -1421,9 +1423,9 @@ class EsmFoldPairToSequence(nn.Cell):
         super().__init__()
 
         self.layernorm = nn.LayerNorm(pairwise_state_dim)
-        self.linear = nn.Dense(pairwise_state_dim, num_heads, has_bias=False)
+        self.linear = nn.Dense(pairwise_state_dim, num_heads, bias=False)
 
-    def construct(self, pairwise_state):
+    def forward(self, pairwise_state):
         """
         Inputs:
           pairwise_state: B x L x L x pairwise_state_dim
@@ -1437,10 +1439,10 @@ class EsmFoldPairToSequence(nn.Cell):
         return pairwise_bias
 
 
-class EsmFoldResidueMLP(nn.Cell):
+class EsmFoldResidueMLP(nn.Module):
 
     """
-    This class represents a multi-layer perceptron (MLP) used for folding residues in the ESM (Evolutionary Scale Modeling) framework. It inherits from the nn.Cell class.
+    This class represents a multi-layer perceptron (MLP) used for folding residues in the ESM (Evolutionary Scale Modeling) framework. It inherits from the nn.Module class.
     
     The EsmFoldResidueMLP class implements a MLP architecture with layer normalization, dense layers, ReLU activation, and dropout. The MLP takes an input tensor and applies a series of linear transformations
 to produce an output tensor. The output tensor is then added element-wise to the input tensor, resulting in the folded residue representation.
@@ -1498,7 +1500,7 @@ to produce an output tensor. The output tensor is then added element-wise to the
             nn.Dropout(p=dropout),
         )
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs an output value by adding the input value with the result of the multi-layer perceptron (MLP) operation.
         
@@ -1516,7 +1518,7 @@ to produce an output tensor. The output tensor is then added element-wise to the
         return x + self.mlp(x)
 
 
-class EsmFoldTriangularSelfAttentionBlock(nn.Cell):
+class EsmFoldTriangularSelfAttentionBlock(nn.Module):
 
     """
     This class represents a block of Triangular Self-Attention for the EsmFold model. It is used to process sequence and pairwise states in the EsmFold model.
@@ -1599,7 +1601,7 @@ class EsmFoldTriangularSelfAttentionBlock(nn.Cell):
         self.row_drop = EsmFoldDropout(config.dropout * 2, 2)
         self.col_drop = EsmFoldDropout(config.dropout * 2, 1)
 
-    def construct(self, sequence_state, pairwise_state, mask=None, chunk_size=None, **__kwargs):
+    def forward(self, sequence_state, pairwise_state, mask=None, chunk_size=None, **__kwargs):
         """
         Inputs:
           sequence_state: B x L x sequence_state_dim pairwise_state: B x L x L x pairwise_state_dim mask: B x L boolean
@@ -1799,12 +1801,12 @@ def get_axial_mask(mask):
     return m
 
 
-class EsmFoldRelativePosition(nn.Cell):
+class EsmFoldRelativePosition(nn.Module):
 
     """
     Represents a class for constructing relative position embeddings for protein folding using the ESM (Evolutionary Scale Modeling) framework. 
     
-    This class inherits from the nn.Cell class and provides methods for initializing the class and constructing pairwise state embeddings based on residue indices and optional masking.
+    This class inherits from the nn.Module class and provides methods for initializing the class and constructing pairwise state embeddings based on residue indices and optional masking.
     
     Attributes:
         - bins: An integer representing the number of position bins used for constructing the embeddings.
@@ -1846,7 +1848,7 @@ class EsmFoldRelativePosition(nn.Cell):
         # is reserved for masked pairs.
         self.embedding = nn.Embedding(2 * self.bins + 2, config.pairwise_state_dim)
 
-    def construct(self, residue_index, mask=None):
+    def forward(self, residue_index, mask=None):
         """
         Input:
           residue_index: B x L tensor of indices (dytpe=torch.long) mask: B x L tensor of booleans
@@ -1873,11 +1875,11 @@ class EsmFoldRelativePosition(nn.Cell):
         return output
 
 
-class EsmFoldAngleResnetBlock(nn.Cell):
+class EsmFoldAngleResnetBlock(nn.Module):
 
     """
     This class represents an EsmFoldAngleResnetBlock, which is a block used in the construction of an EsmFold model. 
-    It inherits from the nn.Cell class.
+    It inherits from the nn.Module class.
     
     Attributes:
         linear_1 (EsmFoldLinear): A linear layer used in the block, initialized with a rectified linear unit (ReLU) activation function.
@@ -1913,7 +1915,7 @@ class EsmFoldAngleResnetBlock(nn.Cell):
 
         self.relu = nn.ReLU()
 
-    def construct(self, a: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, a: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a computation graph for the EsmFoldAngleResnetBlock.
         
@@ -1937,7 +1939,7 @@ class EsmFoldAngleResnetBlock(nn.Cell):
         return a + s_initial
 
 
-class EsmFoldAngleResnet(nn.Cell):
+class EsmFoldAngleResnet(nn.Module):
     """
     Implements Algorithm 20, lines 11-14
     """
@@ -1964,7 +1966,7 @@ class EsmFoldAngleResnet(nn.Cell):
         self.linear_in = EsmFoldLinear(config.sequence_dim, config.resnet_dim)
         self.linear_initial = EsmFoldLinear(config.sequence_dim, config.resnet_dim)
 
-        self.layers = nn.CellList()
+        self.layers = nn.ModuleList()
         for _ in range(config.num_resnet_blocks):
             layer = EsmFoldAngleResnetBlock(config)
             self.layers.append(layer)
@@ -1973,7 +1975,7 @@ class EsmFoldAngleResnet(nn.Cell):
 
         self.relu = nn.ReLU()
 
-    def construct(self, s: mindspore.Tensor, s_initial: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
+    def forward(self, s: mindspore.Tensor, s_initial: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
         """
         Args:
             s:
@@ -2018,7 +2020,7 @@ class EsmFoldAngleResnet(nn.Cell):
         return unnormalized_s, s
 
 
-class EsmFoldInvariantPointAttention(nn.Cell):
+class EsmFoldInvariantPointAttention(nn.Module):
     """
     Implements Algorithm 22.
     """
@@ -2099,7 +2101,7 @@ class EsmFoldInvariantPointAttention(nn.Cell):
         self.softmax = nn.Softmax(axis=-1)
         self.softplus = ops.softplus
 
-    def construct(
+    def forward(
         self,
         s: mindspore.Tensor,
         z: Optional[mindspore.Tensor],
@@ -2239,7 +2241,7 @@ class EsmFoldInvariantPointAttention(nn.Cell):
         return s
 
 
-class EsmFoldBackboneUpdate(nn.Cell):
+class EsmFoldBackboneUpdate(nn.Module):
     """
     Implements part of Algorithm 23.
     """
@@ -2264,7 +2266,7 @@ class EsmFoldBackboneUpdate(nn.Cell):
 
         self.linear = EsmFoldLinear(config.sequence_dim, 6, init="final")
 
-    def construct(self, s: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
+    def forward(self, s: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
         """
         Args:
             [*, N_res, C_s] single representation
@@ -2277,12 +2279,12 @@ class EsmFoldBackboneUpdate(nn.Cell):
         return update
 
 
-class EsmFoldStructureModuleTransitionLayer(nn.Cell):
+class EsmFoldStructureModuleTransitionLayer(nn.Module):
 
     """
     EsmFoldStructureModuleTransitionLayer
     
-    Represents a transition layer for the EsmFold structure module, inheriting from nn.Cell.
+    Represents a transition layer for the EsmFold structure module, inheriting from nn.Module.
     
     This class initializes with the provided configuration and constructs a transition layer for the EsmFold structure module using the specified linear layers and activation functions.
     
@@ -2323,7 +2325,7 @@ class EsmFoldStructureModuleTransitionLayer(nn.Cell):
 
         self.relu = nn.ReLU()
 
-    def construct(self, s):
+    def forward(self, s):
         """Constructs a new EsmFoldStructureModuleTransitionLayer.
         
         This method takes in two parameters, self and s. 
@@ -2350,11 +2352,11 @@ class EsmFoldStructureModuleTransitionLayer(nn.Cell):
         return s
 
 
-class EsmFoldStructureModuleTransition(nn.Cell):
+class EsmFoldStructureModuleTransition(nn.Module):
 
     """
     The EsmFoldStructureModuleTransition class represents a module for transitioning the fold structure in a neural network. 
-    This class inherits from the nn.Cell class and is used to construct transition layers for the fold structure module.
+    This class inherits from the nn.Module class and is used to construct transition layers for the fold structure module.
     
     Attributes:
         config: A configuration object containing parameters for the module.
@@ -2384,7 +2386,7 @@ class EsmFoldStructureModuleTransition(nn.Cell):
         super().__init__()
         self.config = config
 
-        self.layers = nn.CellList()
+        self.layers = nn.ModuleList()
         for _ in range(config.num_transition_layers):
             l = EsmFoldStructureModuleTransitionLayer(config)
             self.layers.append(l)
@@ -2392,7 +2394,7 @@ class EsmFoldStructureModuleTransition(nn.Cell):
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.layer_norm = nn.LayerNorm(config.sequence_dim)
 
-    def construct(self, s):
+    def forward(self, s):
         """
         Constructs the EsmFoldStructureModuleTransition.
         
@@ -2417,10 +2419,10 @@ class EsmFoldStructureModuleTransition(nn.Cell):
         return s
 
 
-class EsmFoldStructureModule(nn.Cell):
+class EsmFoldStructureModule(nn.Module):
 
     """
-    The EsmFoldStructureModule class represents a module for predicting protein structure using Evolutionary Structure Model (ESM) and folding techniques. It inherits from the nn.Cell class.
+    The EsmFoldStructureModule class represents a module for predicting protein structure using Evolutionary Structure Model (ESM) and folding techniques. It inherits from the nn.Module class.
     
     The class includes methods for initializing the module, constructing the protein structure prediction, and converting torsion angles to frames and literature positions to atom14 positions. The construct
 method takes evolutionary formers' output, amino acid indices, and optional sequence mask as input and returns a dictionary of predicted outputs. The _init_residue_constants method initializes constants used
@@ -2471,7 +2473,7 @@ atom14 positions.
         self.bb_update = EsmFoldBackboneUpdate(config)
         self.angle_resnet = EsmFoldAngleResnet(config)
 
-    def construct(
+    def forward(
         self,
         evoformer_output_dict,
         aatype,
@@ -2673,10 +2675,10 @@ float_dtype.
         )
 
 
-class EsmFoldingTrunk(nn.Cell):
+class EsmFoldingTrunk(nn.Module):
 
     """
-    EsmFoldingTrunk is a neural network cell that represents the trunk of the ESM-Fold model. It inherits from the nn.Cell class and contains methods for initializing and constructing the model, as well as a
+    EsmFoldingTrunk is a neural network cell that represents the trunk of the ESM-Fold model. It inherits from the nn.Module class and contains methods for initializing and constructing the model, as well as a
 static method for computing distograms.
     
     Attributes:
@@ -2722,7 +2724,7 @@ a Coordinates object.
 
         self.pairwise_positional_embedding = EsmFoldRelativePosition(config)
 
-        self.blocks = nn.CellList([EsmFoldTriangularSelfAttentionBlock(config) for _ in range(config.num_blocks)])
+        self.blocks = nn.ModuleList([EsmFoldTriangularSelfAttentionBlock(config) for _ in range(config.num_blocks)])
 
         self.recycle_bins = 15
         self.recycle_s_norm = nn.LayerNorm(c_s)
@@ -2756,7 +2758,7 @@ a Coordinates object.
         # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-length chunks.
         self.chunk_size = chunk_size
 
-    def construct(self, seq_feats, pair_feats, true_aa, residx, mask, no_recycles):
+    def forward(self, seq_feats, pair_feats, true_aa, residx, mask, no_recycles):
         """
         Inputs:
           seq_feats: B x L x C tensor of sequence features pair_feats: B x L x L x C tensor of pair features residx: B
@@ -2973,7 +2975,7 @@ and the following elements being the indices of the residues from the 'restypes_
         esm_reorder = [vocab_list.index("<pad>")] + [vocab_list.index(v) for v in residue_constants.restypes_with_x]
         return mindspore.tensor(esm_reorder)
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,

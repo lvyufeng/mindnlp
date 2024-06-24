@@ -53,7 +53,7 @@ if is_vision_available():
 
 # Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# From MindSpore internals
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x

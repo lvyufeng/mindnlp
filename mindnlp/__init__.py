@@ -22,7 +22,6 @@ if os.environ.get('HF_ENDPOINT', None) is None:
 os.environ["MS_DEV_FORCE_ACL"] = '1'
 
 from mindspore import jit as ms_jit
-from mindnlp import injection
 from mindnlp import transformers
 from mindnlp import dataset
 from mindnlp import evaluate

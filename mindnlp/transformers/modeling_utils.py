@@ -40,7 +40,6 @@ from mindnlp.utils.download import is_remote_url, download_url, cached_file, get
 from mindnlp.utils import convert_file_size_to_int, logging, ModelOutput, is_safetensors_available
 from mindnlp._legacy.functional import arange
 from mindnlp.utils.serialization import load, safe_save_file
-from mindnlp.injection import set_global_fp16
 
 from .generation import GenerationMixin
 from .configuration_utils import PretrainedConfig
@@ -897,7 +896,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
                 if os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, subfolder, PT_WEIGHTS_NAME)
                 ):
-                    # Load from a PyTorch checkpoint
+                    # Load from a MindSpore checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, PT_WEIGHTS_NAME)
                 elif os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
@@ -916,7 +915,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
                 elif os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(PT_WEIGHTS_INDEX_NAME, variant))
                 ):
-                    # Load from a sharded PyTorch checkpoint
+                    # Load from a sharded MindSpore checkpoint
                     archive_file = os.path.join(
                         pretrained_model_name_or_path, subfolder, _add_variant(PT_WEIGHTS_INDEX_NAME, variant)
                     )
@@ -1100,8 +1099,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
         with no_init_weights(empty_initializer, _fast_init):
             model = cls(config, *model_args, **model_kwargs)
 
-        if ms_dtype != mindspore.float32:
-            set_global_fp16(False)
 
         if is_sharded:
             converted_filenames = resolved_archive_file
@@ -1365,7 +1362,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
             return
 
         # Check only the first and last input IDs to reduce overhead.
-        if self.config.pad_token_id in input_ids[:, [-1, 0]]:
+        if self.config.pad_token_id in input_ids[:, [-1, 0]].asnumpy():
             warn_string = (
                 "We strongly recommend passing in an `attention_mask` since your input_ids may be padded."
             )
@@ -1388,12 +1385,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
     def num_parameters(self, only_trainable=False):
         """return parameters count"""
         total = 0
-        param_set = set()
         for param in self.get_parameters():
-            param_id = param.uuid
-            if param_id not in param_set and (only_trainable or param.requires_grad):
+            if (only_trainable or param.requires_grad):
                 total += param.size
-            param_set.add(param_id)
         return total
 
     def trainable_params(self, recurse=True):
@@ -1472,7 +1466,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PeftAdapterM
 
         # Only save the model itself if we are using distributed training
         model_to_save = self
-
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)

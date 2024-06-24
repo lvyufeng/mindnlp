@@ -20,7 +20,9 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -353,7 +355,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
         """
         super().__init__(num_positions, embedding_dim)
 
-    def construct(self, input_ids, past_key_values_length=0):
+    def forward(self, input_ids, past_key_values_length=0):
         """
         Constructs the positional embeddings for the input_ids.
         
@@ -373,7 +375,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
         return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
 
 
-class WhisperAttention(nn.Cell):
+class WhisperAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -420,10 +422,10 @@ class WhisperAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=False)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     # Copied from transformers.models.bart.modeling_bart.BartAttention._shape with BART->whisper
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
@@ -445,7 +447,7 @@ class WhisperAttention(nn.Cell):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
     # Copied from transformers.models.bart.modeling_bart.BartAttention.forward with BART->whisper
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -568,14 +570,14 @@ WHISPER_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
-class WhisperEncoderLayer(nn.Cell):
+class WhisperEncoderLayer(nn.Module):
 
     """
-    The `WhisperEncoderLayer` class represents a single layer of the Whisper Encoder, which is used in the training and inference process of the Whisper model. This class inherits from the `nn.Cell` class.
+    The `WhisperEncoderLayer` class represents a single layer of the Whisper Encoder, which is used in the training and inference process of the Whisper model. This class inherits from the `nn.Module` class.
     
     Attributes:
     - `embed_dim` (int): The dimension size of the input embedding.
-    - `self_attn` (nn.Cell): The self-attention module used in the encoder layer.
+    - `self_attn` (nn.Module): The self-attention module used in the encoder layer.
     - `self_attn_layer_norm` (nn.LayerNorm): Layer normalization module applied to the output of the self-attention module.
     - `dropout` (float): Dropout probability applied to the output of the self-attention module.
     - `activation_fn` (function): Activation function applied to the output of the feed-forward network.
@@ -645,7 +647,7 @@ input hidden states.
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm([self.embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -697,13 +699,13 @@ input hidden states.
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Whisper, MBART->WHISPER
-class WhisperDecoderLayer(nn.Cell):
+class WhisperDecoderLayer(nn.Module):
 
     """
     The WhisperDecoderLayer class represents a single layer of the Whisper decoder model, which includes self-attention and cross-attention mechanisms. This class is designed to be used within the
 WhisperTransformer model for sequence-to-sequence tasks.
     
-    This class inherits from nn.Cell and contains methods for initializing the layer and performing computations on input tensors. The layer consists of self-attention, encoder attention, feedforward neural
+    This class inherits from nn.Module and contains methods for initializing the layer and performing computations on input tensors. The layer consists of self-attention, encoder attention, feedforward neural
 network, and layer normalization modules.
     
     The __init__ method sets up the layer with parameters such as embedding dimensions, attention types, dropout rates, activation functions, and normalization layers.
@@ -758,7 +760,7 @@ transformations. The method allows for caching of key-value states and optionall
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm([self.embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -889,7 +891,7 @@ and feature extraction output length computations.
         if isinstance(cell, (nn.Dense, nn.Conv1d)):
             cell.weight.set_data(initializer(Normal(std),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -947,13 +949,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1, pad_mode='pad', has_bias=True)
-        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1, pad_mode='pad', has_bias=True)
+        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1, pad_mode='pad', bias=True)
+        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1, pad_mode='pad', bias=True)
 
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
         self.embed_positions.weight.requires_grad = False
 
-        self.layers = nn.CellList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm([config.d_model])
 
         self.gradient_checkpointing = False
@@ -976,7 +978,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         for param in self.get_parameters():
             param.requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Get the input embeddings for the WhisperEncoder.
         
@@ -984,22 +986,22 @@ class WhisperEncoder(WhisperPreTrainedModel):
             self (WhisperEncoder): The instance of the WhisperEncoder class.
         
         Returns:
-            nn.Cell: The input embeddings.
+            nn.Module: The input embeddings.
         
         Raises:
             None.
         """
         return self.conv1
 
-    def set_input_embeddings(self, value: nn.Cell):
+    def set_input_embeddings(self, value: nn.Module):
         """
         Method to set input embeddings for the WhisperEncoder class.
         
         Args:
             self (WhisperEncoder): The instance of the WhisperEncoder class.
                                    It is used to access the attributes and methods of the class.
-            value (nn.Cell): The input embeddings to be set for the WhisperEncoder.
-                             It should be an instance of the nn.Cell class.
+            value (nn.Module): The input embeddings to be set for the WhisperEncoder.
+                             It should be an instance of the nn.Module class.
         
         Returns:
             None: This method does not return any value explicitly.
@@ -1010,7 +1012,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         """
         self.conv1 = value
 
-    def construct(
+    def forward(
         self,
         input_features,
         attention_mask=None,
@@ -1155,7 +1157,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, padding_idx=self.padding_idx)
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
-        self.layers = nn.CellList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.layer_norm = nn.LayerNorm([config.d_model])
 
@@ -1195,7 +1197,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1538,7 +1540,7 @@ and constructing the model with various input parameters.
 
         return input_features
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1668,7 +1670,7 @@ tokens.
         """
         super().__init__(config)
         self.model = WhisperModel(config)
-        self.proj_out = nn.Dense(config.d_model, config.vocab_size, has_bias=False)
+        self.proj_out = nn.Dense(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1745,7 +1747,7 @@ tokens.
         """
         self.proj_out = new_embeddings
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Returns the input embeddings for the WhisperForConditionalGeneration model.
         
@@ -1753,7 +1755,7 @@ tokens.
             self (WhisperForConditionalGeneration): The instance of the WhisperForConditionalGeneration class.
         
         Returns:
-            nn.Cell: The input embeddings for the model.
+            nn.Module: The input embeddings for the model.
         
         Raises:
             None.
@@ -1767,7 +1769,7 @@ tokens.
         """
         self.model.encoder._freeze_parameters()
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2323,7 +2325,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
         """
         self.decoder.embed_tokens = value
 
-    def construct(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Method to construct a WhisperDecoderWrapper object by invoking the decoder with the provided arguments.
         
@@ -2349,7 +2351,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
     - __init__(self, config): Initializes the WhisperForCausalLM model with the given configuration.
     - get_output_embeddings(self): Returns the output embeddings of the model.
     - set_output_embeddings(self, new_embeddings): Sets new output embeddings for the model.
-    - get_input_embeddings(self) -> nn.Cell: Returns the input embeddings of the model.
+    - get_input_embeddings(self) -> nn.Module: Returns the input embeddings of the model.
     - set_input_embeddings(self, value): Sets new input embeddings for the model.
     - set_decoder(self, decoder): Sets the decoder for the model.
     - get_decoder(self): Returns the decoder of the model.
@@ -2401,7 +2403,7 @@ Union[Tuple, CausalLMOutputWithCrossAttentions]: Constructs the model architectu
         config.is_encoder_decoder = False
         self.model = WhisperDecoderWrapper(config)
 
-        self.proj_out = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.proj_out = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2438,7 +2440,7 @@ Union[Tuple, CausalLMOutputWithCrossAttentions]: Constructs the model architectu
         """
         self.proj_out = new_embeddings
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Retrieves the input embeddings from the underlying model.
         
@@ -2446,7 +2448,7 @@ Union[Tuple, CausalLMOutputWithCrossAttentions]: Constructs the model architectu
             self (WhisperForCausalLM): The instance of the WhisperForCausalLM class.
         
         Returns:
-            nn.Cell: The input embeddings obtained from the underlying model.
+            nn.Module: The input embeddings obtained from the underlying model.
         
         Raises:
             None.
@@ -2515,7 +2517,7 @@ model's 'get_input_embeddings' function is called to retrieve these embeddings.
         """
         return self.model.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2735,8 +2737,8 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
     Methods:
     - `__init__(self, config)`: Initializes the `WhisperForAudioClassification` instance.
     - `freeze_encoder(self)`: Disables gradient computation for the Whisper encoder, preventing its parameters from being updated during training.
-    - `get_input_embeddings(self) -> nn.Cell`: Retrieves the input embeddings from the encoder.
-    - `set_input_embeddings(self, value: nn.Cell)`: Sets the input embeddings for the encoder.
+    - `get_input_embeddings(self) -> nn.Module`: Retrieves the input embeddings from the encoder.
+    - `set_input_embeddings(self, value: nn.Module)`: Sets the input embeddings for the encoder.
     - `construct(self, input_features, head_mask, encoder_outputs, labels, output_attentions, output_hidden_states, return_dict) -> Union[Tuple[mindspore.Tensor], SequenceClassifierOutput]`: Constructs the
 forward pass of the model for audio classification.
     
@@ -2810,7 +2812,7 @@ forward pass of the model for audio classification.
         """
         self.encoder._freeze_parameters()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         This method returns the input embeddings from the encoder for audio classification.
         
@@ -2818,14 +2820,14 @@ forward pass of the model for audio classification.
             self (WhisperForAudioClassification): The instance of the WhisperForAudioClassification class.
             
         Returns:
-            nn.Cell: The input embeddings from the encoder for audio classification.
+            nn.Module: The input embeddings from the encoder for audio classification.
         
         Raises:
             None
         """
         return self.encoder.get_input_embeddings()
 
-    def set_input_embeddings(self, value: nn.Cell):
+    def set_input_embeddings(self, value: nn.Module):
         """
         Method to set the input embeddings for the WhisperForAudioClassification class.
         
@@ -2836,9 +2838,9 @@ forward pass of the model for audio classification.
                 Restrictions: None
         
             value: The input embeddings to be set for the encoder.
-                Type: nn.Cell
+                Type: nn.Module
                 Purpose: Represents the input embeddings used for encoding.
-                Restrictions: Should be an instance of nn.Cell.
+                Restrictions: Should be an instance of nn.Module.
         
         Returns:
             None. This method does not return any value.
@@ -2848,7 +2850,7 @@ forward pass of the model for audio classification.
         """
         self.encoder.set_input_embeddings(value)
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,

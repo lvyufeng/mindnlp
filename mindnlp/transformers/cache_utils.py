@@ -521,7 +521,7 @@ class StaticCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
+        # TODO: Fix once the stateful `int` bug in MindSpore is fixed.
         raise ValueError(
             "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
         )

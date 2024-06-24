@@ -19,7 +19,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from ....modules.functional import finfo
@@ -64,7 +67,7 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
-    def construct(self, input_ids_shape, past_key_values_length: int = 0):
+    def forward(self, input_ids_shape, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = ops.arange(
@@ -74,7 +77,7 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Blenderbot
-class BlenderbotAttention(nn.Cell):
+class BlenderbotAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -121,10 +124,10 @@ class BlenderbotAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -150,7 +153,7 @@ method is called on the reshaped tensor to swap the dimensions at index 1 and in
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -274,13 +277,13 @@ BLENDERBOT_ATTENTION_CLASSES = {"eager": BlenderbotAttention}
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Blenderbot, MBART->BLENDERBOT
-class BlenderbotEncoderLayer(nn.Cell):
+class BlenderbotEncoderLayer(nn.Module):
 
     """
     This class represents a single layer of the BlenderbotEncoder. It is responsible for processing the input hidden states and applying self-attention, feed-forward neural network (FFN) layers, and layer
 normalization.
     
-    The BlenderbotEncoderLayer class inherits from the nn.Cell class.
+    The BlenderbotEncoderLayer class inherits from the nn.Module class.
     
     Attributes:
         embed_dim (int): The dimension of the input hidden states.
@@ -342,7 +345,7 @@ normalization.
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -394,10 +397,10 @@ normalization.
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Blenderbot, MBART->BLENDERBOT
-class BlenderbotDecoderLayer(nn.Cell):
+class BlenderbotDecoderLayer(nn.Module):
 
     """
-    A BlenderbotDecoderLayer represents a single layer of the Blenderbot decoder model. It is used to decode the input sequence and generate the output sequence. This class inherits from nn.Cell and contains
+    A BlenderbotDecoderLayer represents a single layer of the Blenderbot decoder model. It is used to decode the input sequence and generate the output sequence. This class inherits from nn.Module and contains
 various components such as self-attention, encoder attention, feed-forward networks, and layer normalization.
     
     Attributes:
@@ -483,7 +486,7 @@ the input arguments and the configuration of the layer.
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -597,7 +600,7 @@ inputs.
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(std),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -678,14 +681,14 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
             config.max_position_embeddings,
             embed_dim,
         )
-        self.layers = nn.CellList([BlenderbotEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([BlenderbotEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -859,7 +862,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
             config.max_position_embeddings,
             config.d_model,
         )
-        self.layers = nn.CellList([BlenderbotDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([BlenderbotDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -900,7 +903,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1250,7 +1253,7 @@ encoder last hidden state, encoder hidden states, and encoder attentions.
         """
         return self.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1392,7 +1395,7 @@ encoder_outputs=None, **kwargs): Prepares the inputs for generation.
         super().__init__(config)
         self.model = BlenderbotModel(config)
         self.final_logits_bias = ops.zeros((1, self.model.shared.vocab_size))
-        self.lm_head = nn.Dense(config.d_model, self.model.shared.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, self.model.shared.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1531,7 +1534,7 @@ the existing 'final_logits_bias' tensor using ops.cat() function along the last 
         """
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1722,7 +1725,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
         super().__init__(config)
         self.decoder = BlenderbotDecoder(config)
 
-    def construct(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Method 'construct' in the class 'BlenderbotDecoderWrapper'.
             
@@ -1781,7 +1784,7 @@ cache.
         super().__init__(config)
         self.model = BlenderbotDecoderWrapper(config)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1893,7 +1896,7 @@ embeddings capture the semantic meaning of the input tokens and are essential fo
         """
         return self.model.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

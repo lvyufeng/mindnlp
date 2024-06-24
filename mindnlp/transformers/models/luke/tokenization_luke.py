@@ -1602,16 +1602,16 @@ character indices.
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch. Padding side (left/right) padding token ids are defined at the tokenizer level (with
         `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the `encoded_inputs` passed
-        are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result will use the same type unless
-        you provide a different tensor type with `return_tensors`. In the case of PyTorch tensors, you will lose the
+        are dictionary of numpy arrays, MindSpore tensors or TensorFlow tensors, the result will use the same type unless
+        you provide a different tensor type with `return_tensors`. In the case of MindSpore tensors, you will lose the
         specific device of your tensors however.
 
         Args:
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
                 Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
                 tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
-                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function. Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or
+                List[int]]]*) so you can use this method during preprocessing as well as in a MindSpore Dataloader
+                collate function. Instead of `List[int]` you can have tensors (numpy arrays, MindSpore tensors or
                 TensorFlow tensors), see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -1638,13 +1638,13 @@ character indices.
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
-        # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
+        # We do this to allow using this method as a collate_fn function in MindSpore Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
@@ -1662,9 +1662,9 @@ character indices.
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have MindSpore/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
-        # Note that we lose the specific device the tensor may be on for PyTorch
+        # Note that we lose the specific device the tensor may be on for MindSpore
 
         first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):

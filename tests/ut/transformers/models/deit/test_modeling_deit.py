@@ -334,7 +334,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
                     inputs["labels"] = inputs["labels"].astype(problem_type["dtype"])
 
-                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # This tests that we do not trigger the warning form MindSpore "Using a target size that is different
                     # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
                     # they have the same size." which is a symptom something in wrong for the regression problem.
                     # See https://github.com/huggingface/transformers/issues/11780

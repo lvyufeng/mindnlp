@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
-from mindspore import ops, Tensor
 from .module import Module
+from ...tensor import Tensor
+from ... import ops
 
 class GELU(Module):
     r"""Applies the Gaussian Error Linear Units function:

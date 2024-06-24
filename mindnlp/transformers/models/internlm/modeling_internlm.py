@@ -20,7 +20,9 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import mindspore
 from mindspore import Tensor, Parameter
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 from mindspore import dtype as mstype
 
@@ -79,11 +81,12 @@ def _expand_mask(mask: Tensor, dtype: mstype, tgt_len: Optional[int] = None):
     )
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->InternLM
-class InternLMRMSNorm(nn.Cell):
+class InternLMRMSNorm(nn.Module):
     """
     RMSNorm
     """
-    def __init__(self, hidden_size, epsilon=1e-6):
+    def __init__(self, hidden_size, eps=
+1e-6):
         """
         RMSNorm is equivalent to T5LayerNorm
         """
@@ -91,7 +94,7 @@ class InternLMRMSNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size), 'weight')
         self.variance_epsilon = epsilon
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the RMS normalization of hidden states.
         
@@ -115,7 +118,7 @@ class InternLMRMSNorm(nn.Cell):
 
         return self.weight * hidden_states
 
-class InternLMRotaryEmbedding(nn.Cell):
+class InternLMRotaryEmbedding(nn.Module):
     """
     RotaryEmbedding
     """
@@ -147,7 +150,7 @@ class InternLMRotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos()[None, None, :, :]
         self.sin_cached = emb.sin()[None, None, :, :]
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         '''
         This method constructs the rotary embeddings for the input sequence.
         
@@ -287,7 +290,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
-class InternLMMLP(nn.Cell):
+class InternLMMLP(nn.Module):
     """
     MLP
     """
@@ -314,12 +317,12 @@ class InternLMMLP(nn.Cell):
             - ValueError: If the hidden_act parameter does not correspond to a supported activation function.
         """
         super().__init__()
-        self.gate_proj = nn.Dense(hidden_size, intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(intermediate_size, hidden_size, has_bias=False)
-        self.up_proj = nn.Dense(hidden_size, intermediate_size, has_bias=False)
+        self.gate_proj = nn.Dense(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Dense(intermediate_size, hidden_size, bias=False)
+        self.up_proj = nn.Dense(hidden_size, intermediate_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs the output of the InternLMMLP model.
         
@@ -335,7 +338,7 @@ class InternLMMLP(nn.Cell):
         """
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
-class InternLMAttention(nn.Cell):
+class InternLMAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config: InternLMConfig):
         """
@@ -387,10 +390,10 @@ class InternLMAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.bias)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.bias)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.bias)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=config.bias)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.bias)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.bias)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.bias)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=config.bias)
         self._init_rope()
 
     def _init_rope(self):
@@ -441,7 +444,7 @@ class InternLMAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -525,7 +528,7 @@ class InternLMAttention(nn.Cell):
 INTERNLM_ATTENTION_CLASSES = {
     "eager": InternLMAttention,
 }
-class InternLMDecoderLayer(nn.Cell):
+class InternLMDecoderLayer(nn.Module):
     """
     DecoderLayer
     """
@@ -556,10 +559,12 @@ class InternLMDecoderLayer(nn.Cell):
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = InternLMRMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
-        self.post_attention_layernorm = InternLMRMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.input_layernorm = InternLMRMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
+        self.post_attention_layernorm = InternLMRMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: Tensor,
             attention_mask: Optional[Tensor] = None,
@@ -727,8 +732,9 @@ class InternLMModel(InternLMPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
 
-        self.layers = nn.CellList([InternLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = InternLMRMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.layers = nn.ModuleList([InternLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = InternLMRMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.gradient_checkpointing = False
@@ -803,7 +809,7 @@ class InternLMModel(InternLMPreTrainedModel):
 
         return combined_attention_mask
 
-    def construct(
+    def forward(
             self,
             input_ids: Tensor = None,
             attention_mask: Optional[Tensor] = None,
@@ -1005,7 +1011,7 @@ masked language modeling loss.
         super().__init__(config)
         self.model = InternLMModel(config)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1118,7 +1124,7 @@ semantic meaning and contextual information of the tokens, which is crucial for 
         """
         return self.model
 
-    def construct(
+    def forward(
             self,
             input_ids: Tensor = None,
             attention_mask: Optional[Tensor] = None,
@@ -1320,7 +1326,7 @@ parameter is True, the method returns a SequenceClassifierOutputWithPast object,
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = InternLMModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1359,7 +1365,7 @@ the input embeddings or perform any additional processing. The retrieved input e
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

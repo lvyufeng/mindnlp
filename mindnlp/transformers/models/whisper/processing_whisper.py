@@ -141,7 +141,7 @@ returned by this method.
             self: The instance of the WhisperProcessor class.
             text (str): The input text for which prompt IDs need to be retrieved.
             return_tensors (str, optional): Specifies the type of tensors to be returned. Defaults to 'np'.
-                Possible values: 'np' for numpy arrays, 'pt' for PyTorch tensors, 'tf' for TensorFlow tensors.
+                Possible values: 'np' for numpy arrays, 'pt' for MindSpore tensors, 'tf' for TensorFlow tensors.
                 Default value: 'np'.
         
         Returns:

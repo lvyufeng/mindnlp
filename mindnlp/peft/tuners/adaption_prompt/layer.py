@@ -71,7 +71,7 @@ class AdaptedAttention(nn.Cell):
             key = getattr(self.model, k_proj_layer)(self.adaption_prompt)
             value = getattr(self.model, v_proj_layer)(self.adaption_prompt)
 
-        # Operations are similar to PyTorch but using MindSpore operations
+        # Operations are similar to MindSpore but using MindSpore operations
         transpose_op = P.Transpose()
         adapter_k = key.view(1, self.adapter_len, (self.model.num_heads // factor), self.model.head_dim)
         adapter_k = ops.tile(adapter_k, (bsz, 1, 1, 1))

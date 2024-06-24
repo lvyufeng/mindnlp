@@ -20,7 +20,9 @@ from typing import List, Optional, Tuple, Union
 
 import mindspore
 import numpy as np
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal, initializer
 
 from mindnlp.modules.functional import finfo
@@ -45,7 +47,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "tau/splinter-base"
 _CONFIG_FOR_DOC = "SplinterConfig"
 
-class SplinterEmbeddings(nn.Cell):
+class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -63,7 +65,7 @@ class SplinterEmbeddings(nn.Cell):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
@@ -75,7 +77,7 @@ class SplinterEmbeddings(nn.Cell):
             config, "position_embedding_type", "absolute"
         )
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -112,7 +114,7 @@ class SplinterEmbeddings(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Splinter
-class SplinterSelfAttention(nn.Cell):
+class SplinterSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
@@ -151,7 +153,7 @@ class SplinterSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -272,16 +274,16 @@ class SplinterSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Splinter
-class SplinterSelfOutput(nn.Cell):
+class SplinterSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor
     ) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -296,7 +298,7 @@ SPLINTER_SELF_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Splinter,BERT->SPLINTER
-class SplinterAttention(nn.Cell):
+class SplinterAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         self.self = SPLINTER_SELF_ATTENTION_CLASSES[config._attn_implementation](
@@ -328,7 +330,7 @@ class SplinterAttention(nn.Cell):
         )
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -355,7 +357,7 @@ class SplinterAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Splinter
-class SplinterIntermediate(nn.Cell):
+class SplinterIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -364,23 +366,23 @@ class SplinterIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Splinter
-class SplinterOutput(nn.Cell):
+class SplinterOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor
     ) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -390,7 +392,7 @@ class SplinterOutput(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Splinter
-class SplinterLayer(nn.Cell):
+class SplinterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -409,7 +411,7 @@ class SplinterLayer(nn.Cell):
         self.intermediate = SplinterIntermediate(config)
         self.output = SplinterOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -492,16 +494,16 @@ class SplinterLayer(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Splinter
-class SplinterEncoder(nn.Cell):
+class SplinterEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [SplinterLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -609,7 +611,7 @@ class SplinterPreTrainedModel(PreTrainedModel):
                     cell.weight.dtype,
                 )
             )
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(
                     initializer("zeros", cell.bias.shape, cell.bias.dtype)
                 )
@@ -659,7 +661,7 @@ class SplinterModel(SplinterPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -796,7 +798,7 @@ class SplinterModel(SplinterPreTrainedModel):
         )
 
 
-class SplinterFullyConnectedLayer(nn.Cell):
+class SplinterFullyConnectedLayer(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_act="gelu"):
         super().__init__()
 
@@ -807,14 +809,14 @@ class SplinterFullyConnectedLayer(nn.Cell):
         self.act_fn = ACT2FN[hidden_act]
         self.LayerNorm = nn.LayerNorm([self.output_dim])
 
-    def construct(self, inputs: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, inputs: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(inputs)
         hidden_states = self.act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
 
-class QuestionAwareSpanSelectionHead(nn.Cell):
+class QuestionAwareSpanSelectionHead(nn.Module):
     """
     Implementation of Question-Aware Span Selection (QASS) head, described in Splinter's paper:
 
@@ -837,13 +839,13 @@ class QuestionAwareSpanSelectionHead(nn.Cell):
         )
 
         self.start_classifier = nn.Dense(
-            config.hidden_size, config.hidden_size, has_bias=False
+            config.hidden_size, config.hidden_size, bias=False
         )
         self.end_classifier = nn.Dense(
-            config.hidden_size, config.hidden_size, has_bias=False
+            config.hidden_size, config.hidden_size, bias=False
         )
 
-    def construct(self, inputs, positions):
+    def forward(self, inputs, positions):
         _, _, dim = inputs.shape
         index = positions.unsqueeze(-1).tile(
             (1, 1, dim)
@@ -885,7 +887,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1036,7 +1038,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

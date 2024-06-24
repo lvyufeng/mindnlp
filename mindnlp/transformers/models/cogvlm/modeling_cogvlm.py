@@ -8,7 +8,10 @@ except:
 import math
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 from mindspore.dataset import transforms,vision
 from mindnlp.modules.functional import finfo
@@ -56,14 +59,14 @@ def _expand_mask(mask: mindspore.Tensor, dtype: mindspore.dtype, tgt_len: Option
     return inverted_mask.masked_fill(inverted_mask.to(mindspore.bool_), finfo(dtype=dtype,attr='min'))
 
 
-class RMSNorm(nn.Cell):
+class RMSNorm(nn.Module):
 
     """
     This class represents a Root Mean Square Normalization (RMSNorm) layer that can be used in neural networks for feature normalization.
     
     RMSNorm is a technique used to normalize the hidden states of a neural network layer. It calculates the variance of the hidden states and applies normalization based on the root mean square of the variance.
     
-    This class inherits from the nn.Cell class in the MindSpore library.
+    This class inherits from the nn.Module class in the MindSpore library.
     
     Attributes:
         weight (mindspore.Parameter): The weight parameter used for the normalization.
@@ -110,7 +113,7 @@ class RMSNorm(nn.Cell):
         self.weight = mindspore.Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs an RMSNorm object.
         
@@ -137,11 +140,11 @@ class RMSNorm(nn.Cell):
         return (self.weight * hidden_states).to(input_dtype)
 
 
-class MLP(nn.Cell):
+class MLP(nn.Module):
 
     """
     This class represents a Multi-Layer Perceptron (MLP) neural network model, which is used for various machine learning tasks.
-    The MLP class inherits from the nn.Cell class, which is a fundamental building block for creating neural network models.
+    The MLP class inherits from the nn.Module class, which is a fundamental building block for creating neural network models.
     
     Attributes:
         hidden_size (int): The size of the hidden layer in the MLP.
@@ -183,12 +186,12 @@ class MLP(nn.Cell):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Method to construct a down_proj output based on the given input x.
         
@@ -228,10 +231,10 @@ def get_expert_mask(token_type_ids):
     return vision_token_mask, language_token_mask
 
 
-class VisionExpertMLP(nn.Cell):
+class VisionExpertMLP(nn.Module):
 
     """
-    The VisionExpertMLP class represents a multi-layer perceptron (MLP) model designed for expert processing of vision-related and language-related inputs. This class inherits from the nn.Cell module.
+    The VisionExpertMLP class represents a multi-layer perceptron (MLP) model designed for expert processing of vision-related and language-related inputs. This class inherits from the nn.Module module.
     
     Attributes:
         language_mlp (MLP): An instance of the MLP class for processing language-related inputs.
@@ -274,7 +277,7 @@ masks, and then aggregates the results to produce the final output.
         self.language_mlp = MLP(config)
         self.vision_mlp = MLP(config)
 
-    def construct(self, hidden_states: "mindspore.Tensor(B, L, D)", token_type_ids: "mindspore.Tensor(B, L)"):
+    def forward(self, hidden_states: "mindspore.Tensor(B, L, D)", token_type_ids: "mindspore.Tensor(B, L)"):
         """
         Constructs the expert output by applying vision and language MLPs on the given hidden states.
         
@@ -349,7 +352,7 @@ def attention_fn(
         attention_mask: "mindspore.Tensor(B, H, L, HD)",
         *,
         scaling_attention_score: bool = True,
-        attention_dropout: nn.Cell = None):
+        attention_dropout: nn.Module = None):
     """
     The attention_fn function calculates the attention scores between the given query, key, and value layers, using an attention mask if provided. It then applies softmax to normalize the attention scores and
 performs an optional attention dropout. Finally, it computes the context layer by multiplying the attention scores with the value layer.
@@ -362,7 +365,7 @@ performs an optional attention dropout. Finally, it computes the context layer b
     
     Keyword Args:
         scaling_attention_score (bool, optional): Determines whether to scale the attention scores by dividing the query_layer by the square root of its hidden dimension. Defaults to True.
-        attention_dropout (nn.Cell, optional): An attention dropout cell that applies dropout to the attention scores. Defaults to None.
+        attention_dropout (nn.Module, optional): An attention dropout cell that applies dropout to the attention scores. Defaults to None.
     
     Returns:
         context_layer: The context layer tensor obtained by multiplying the attention scores with the value layer. It has the same shape as the query_layer.
@@ -381,10 +384,10 @@ performs an optional attention dropout. Finally, it computes the context layer b
     return context_layer
 
 
-class RotaryEmbedding(mindspore.nn.Cell):
+class RotaryEmbedding(nn.Module):
 
     """
-    The 'RotaryEmbedding' class represents a rotary positional embedding layer in the mindspore.nn framework. This class inherits from the mindspore.nn.Cell class.
+    The 'RotaryEmbedding' class represents a rotary positional embedding layer in the mindspore.nn framework. This class inherits from the nn.Module class.
     
     Attributes:
         dim (int): The dimensionality of the embedding.
@@ -499,7 +502,7 @@ class RotaryEmbedding(mindspore.nn.Cell):
         self.cos_cached = emb.cos()[:, None, :].to(dtype)
         self.sin_cached = emb.sin()[:, None, :].to(dtype)
 
-    def construct(self, x, seq_len):
+    def forward(self, x, seq_len):
         """
         This method constructs the rotary embedding for the input sequence.
         
@@ -586,10 +589,10 @@ def apply_rotary_pos_emb_index_bhs(q, k, cos, sin, position_id,unsqueeze_dim=1):
     return q, k
 
 
-class VisionExpertAttention(nn.Cell):
+class VisionExpertAttention(nn.Module):
 
     """
-    This class represents a vision expert attention mechanism used in a neural network model. It is a subclass of nn.Cell.
+    This class represents a vision expert attention mechanism used in a neural network model. It is a subclass of nn.Module.
     
     Attributes:
         config (Config): The configuration object for the attention mechanism.
@@ -631,10 +634,10 @@ class VisionExpertAttention(nn.Cell):
         self.max_position_embeddings = config.max_position_embeddings
 
         self.rotary_emb = RotaryEmbedding(self.head_dim)
-        self.vision_expert_query_key_value = nn.Dense(self.hidden_size, self.hidden_size * 3, has_bias=False)
-        self.vision_expert_dense = nn.Dense(self.hidden_size, self.hidden_size, has_bias=False)
-        self.language_expert_query_key_value = nn.Dense(self.hidden_size, self.hidden_size * 3, has_bias=False)
-        self.language_expert_dense = nn.Dense(self.hidden_size, self.hidden_size, has_bias=False)
+        self.vision_expert_query_key_value = nn.Dense(self.hidden_size, self.hidden_size * 3, bias=False)
+        self.vision_expert_dense = nn.Dense(self.hidden_size, self.hidden_size, bias=False)
+        self.language_expert_query_key_value = nn.Dense(self.hidden_size, self.hidden_size * 3, bias=False)
+        self.language_expert_dense = nn.Dense(self.hidden_size, self.hidden_size, bias=False)
 
     def _swapaxes_for_scores(self, tensor):
         """Transpose a 3D tensor [B, L, H*HD] into a 4D tensor with size [B H L HD]."""
@@ -642,7 +645,7 @@ class VisionExpertAttention(nn.Cell):
         tensor = tensor.view(*new_tensor_shape)
         return tensor.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             token_type_ids: mindspore.Tensor,
@@ -721,7 +724,7 @@ class VisionExpertAttention(nn.Cell):
         return attn_output, None, past_key_value
 
 
-class CogVLMDecoderLayer(nn.Cell):
+class CogVLMDecoderLayer(nn.Module):
 
     """
     CogVLMDecoderLayer represents a single layer of the Vision-Language Multimodal Transformer decoder. 
@@ -762,7 +765,7 @@ Optional[Tuple[mindspore.Tensor]] = None, output_attentions: Optional[bool] = Fa
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             token_type_ids: mindspore.Tensor,
@@ -862,7 +865,7 @@ normal distribution with a mean of 0 and a standard deviation specified by `self
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(mean=0,sigma=self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -988,7 +991,7 @@ Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[Tuple, BaseM
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx,dtype=mindspore.float32)
-        self.layers = nn.CellList([CogVLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([CogVLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.vision = EVA2CLIPModel(config)
@@ -1023,7 +1026,7 @@ Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[Tuple, BaseM
         images_features = self.vision(images)
         return images_features
 
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             images: List[List[mindspore.Tensor]] = None,
@@ -1348,7 +1351,7 @@ model with given inputs and returns the output.
         super().__init__(config)
         self.model = CogVLMModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1454,7 +1457,7 @@ embeddings during the model's forward pass.
         """
         return self.model
 
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             images: List[List[mindspore.Tensor]] = None,

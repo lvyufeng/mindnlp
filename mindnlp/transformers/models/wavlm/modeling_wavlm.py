@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch WavLM model."""
+"""MindSpore WavLM model."""
 
 import math
 import warnings
@@ -21,7 +21,9 @@ from typing import Optional, Tuple, Union, List
 import numpy as np
 import mindspore
 from mindspore import ops
-from mindspore import nn
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal, TruncatedNormal, Uniform, HeNormal
 # from mindnlp._legacy.functional import multi_head_attention_forward
 from mindnlp._legacy.functional import _mha_shape_check, is_floating_point, _in_projection, _scaled_dot_product_attention
@@ -298,7 +300,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->WavLM
-class WavLMNoLayerNormConvLayer(nn.Cell):
+class WavLMNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -309,19 +311,19 @@ class WavLMNoLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->WavLM
-class WavLMLayerNormConvLayer(nn.Cell):
+class WavLMLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -332,13 +334,13 @@ class WavLMLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.layer_norm = nn.LayerNorm(self.out_conv_dim)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.swapaxes(-2, -1)
@@ -350,7 +352,7 @@ class WavLMLayerNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->WavLM
-class WavLMGroupNormConvLayer(nn.Cell):
+class WavLMGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -361,14 +363,14 @@ class WavLMGroupNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -376,7 +378,7 @@ class WavLMGroupNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->WavLM
-class WavLMPositionalConvEmbedding(nn.Cell):
+class WavLMPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -386,7 +388,7 @@ class WavLMPositionalConvEmbedding(nn.Cell):
             padding=config.num_conv_pos_embeddings // 2,
             group=config.num_conv_pos_embedding_groups,
             pad_mode='pad',
-            has_bias=True
+            bias=True
         )
 
         weight_norm = mindnlp.modules.weight_norm.weight_norm
@@ -399,7 +401,7 @@ class WavLMPositionalConvEmbedding(nn.Cell):
         self.padding = WavLMSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = hidden_states.swapaxes(1, 2)
 
         hidden_states = self.conv(hidden_states)
@@ -411,19 +413,19 @@ class WavLMPositionalConvEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->WavLM
-class WavLMSamePadLayer(nn.Cell):
+class WavLMSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->WavLM
-class WavLMFeatureEncoder(nn.Cell):
+class WavLMFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -439,7 +441,7 @@ class WavLMFeatureEncoder(nn.Cell):
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
-        self.conv_layers = nn.CellList(conv_layers)
+        self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -448,7 +450,7 @@ class WavLMFeatureEncoder(nn.Cell):
             param.requires_grad = False
         self._requires_grad = False
 
-    def construct(self, input_values):
+    def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -479,14 +481,14 @@ class WavLMFeatureExtractor(WavLMFeatureEncoder):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->WavLM
-class WavLMFeatureProjection(nn.Cell):
+class WavLMFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Dense(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(p=config.feat_proj_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
@@ -494,7 +496,7 @@ class WavLMFeatureProjection(nn.Cell):
         return hidden_states, norm_hidden_states
 
 
-class WavLMAttention(nn.Cell):
+class WavLMAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -533,7 +535,7 @@ class WavLMAttention(nn.Cell):
         if has_relative_position_bias:
             self.rel_attn_embed = nn.Embedding(self.num_buckets, self.num_heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -876,7 +878,7 @@ class WavLMAttention(nn.Cell):
                     attn_output = attn_output.squeeze(1)
                 return attn_output, None
 
-        # PyTorch 1.3.0 has F.multi_head_attention_forward defined
+        # MindSpore 1.3.0 has F.multi_head_attention_forward defined
         # so no problem with backwards compatibility
         attn_output, attn_weights = multi_head_attention_forward(
             query,
@@ -908,7 +910,7 @@ class WavLMAttention(nn.Cell):
         if attn_weights is not None:
             # IMPORTANT: Attention weights are averaged weights
             # here which should not be the case. This is an open issue
-            # on PyTorch: https://github.com/pytorch/pytorch/issues/32590
+            # on MindSpore: https://github.com/pytorch/pytorch/issues/32590
             attn_weights = attn_weights[:, None].broadcast_to(
                 attn_weights.shape[:1] + (self.num_heads,) + attn_weights.shape[1:]
             )
@@ -952,7 +954,7 @@ class WavLMAttention(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->WavLM
-class WavLMFeedForward(nn.Cell):
+class WavLMFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(p=config.activation_dropout)
@@ -966,7 +968,7 @@ class WavLMFeedForward(nn.Cell):
         self.output_dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(p=config.hidden_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
@@ -976,7 +978,7 @@ class WavLMFeedForward(nn.Cell):
         return hidden_states
 
 
-class WavLMEncoderLayer(nn.Cell):
+class WavLMEncoderLayer(nn.Module):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -988,11 +990,13 @@ class WavLMEncoderLayer(nn.Cell):
             has_relative_position_bias=has_relative_position_bias,
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.feed_forward = WavLMFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
         attn_residual = hidden_states
         hidden_states, attn_weights, position_bias = self.attention(
             hidden_states,
@@ -1022,7 +1026,7 @@ class WavLMEncoderLayer(nn.Cell):
         return outputs
 
 
-class WavLMEncoderLayerStableLayerNorm(nn.Cell):
+class WavLMEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -1034,11 +1038,13 @@ class WavLMEncoderLayerStableLayerNorm(nn.Cell):
             has_relative_position_bias=has_relative_position_bias,
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.feed_forward = WavLMFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, position_bias = self.attention(
@@ -1059,19 +1065,20 @@ class WavLMEncoderLayerStableLayerNorm(nn.Cell):
         return outputs
 
 
-class WavLMEncoder(nn.Cell):
+class WavLMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [WavLMEncoderLayer(config, has_relative_position_bias=(i == 0)) for i in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1140,14 +1147,15 @@ class WavLMEncoder(nn.Cell):
         )
 
 
-class WavLMEncoderStableLayerNorm(nn.Cell):
+class WavLMEncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.pos_conv_embed = WavLMPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [
                 WavLMEncoderLayerStableLayerNorm(config, has_relative_position_bias=(i == 0))
                 for i in range(config.num_hidden_layers)
@@ -1155,7 +1163,7 @@ class WavLMEncoderStableLayerNorm(nn.Cell):
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1220,7 +1228,7 @@ class WavLMEncoderStableLayerNorm(nn.Cell):
         )
 
 
-class WavLMGumbelVectorQuantizer(nn.Cell):
+class WavLMGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See [CATEGORICAL REPARAMETERIZATION WITH
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
@@ -1253,7 +1261,7 @@ class WavLMGumbelVectorQuantizer(nn.Cell):
         perplexity = ops.exp(-ops.sum(marginal_probs * ops.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -1291,7 +1299,7 @@ class WavLMGumbelVectorQuantizer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Adapter with Wav2Vec2->WavLM
-class WavLMAdapter(nn.Cell):
+class WavLMAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -1302,10 +1310,10 @@ class WavLMAdapter(nn.Cell):
         else:
             self.proj = self.proj_layer_norm = None
 
-        self.layers = nn.CellList(WavLMAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layers = nn.ModuleList(WavLMAdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -1323,7 +1331,7 @@ class WavLMAdapter(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2AdapterLayer with Wav2Vec2->WavLM
-class WavLMAdapterLayer(nn.Cell):
+class WavLMAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -1335,7 +1343,7 @@ class WavLMAdapterLayer(nn.Cell):
             pad_mode='pad'
         )
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = ops.glu(hidden_states, axis=1)
 
@@ -1396,7 +1404,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
             #     module.bias.data.zero_()
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                              cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, (nn.LayerNorm, nn.GroupNorm)):
             # module.bias.data.zero_()
@@ -1411,7 +1419,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
             #     nn.init.uniform_(module.bias, a=-k, b=k)
             cell.weight.set_data(
                 initializer(HeNormal(),cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 k = math.sqrt(cell.group / (cell.in_channels * cell.kernel_size[0]))
                 cell.bias.set_data(initializer(Uniform(scale=k),
                                                     cell.bias.shape, cell.bias.dtype))
@@ -1470,8 +1478,8 @@ WAVLM_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch [torch.nn.Cell](https://pytorch.org/docs/stable/nn.html#torch.nn.Cell) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    This model is a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage and
     behavior.
 
     Parameters:
@@ -1698,7 +1706,7 @@ class WavLMModel(WavLMPreTrainedModel):
 
         return hidden_states
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1827,7 +1835,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
         for param in self.wavlm.get_parameters():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1946,7 +1954,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->WavLM, wav2vec2->wavlm
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2052,7 +2060,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         for param in self.wavlm.get_parameters():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2107,7 +2115,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.AMSoftmaxLoss
-class AMSoftmaxLoss(nn.Cell):
+class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super(AMSoftmaxLoss, self).__init__()
         self.scale = scale
@@ -2116,7 +2124,7 @@ class AMSoftmaxLoss(nn.Cell):
         self.weight = mindspore.Parameter(ops.randn(input_dim, num_labels), requires_grad=True)
         # self.loss = nn.CrossEntropyLoss()
 
-    def construct(self, hidden_states, labels):
+    def forward(self, hidden_states, labels):
         labels = labels.flatten()
         weight = mindnlp.modules.functional.normalize(self.weight, dim=0)
         hidden_states = mindnlp.modules.functional.normalize(hidden_states, dim=1)
@@ -2131,7 +2139,7 @@ class AMSoftmaxLoss(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.TDNNLayer
-class TDNNLayer(nn.Cell):
+class TDNNLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
@@ -2142,7 +2150,7 @@ class TDNNLayer(nn.Cell):
         self.kernel = nn.Dense(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         # if is_peft_available():
         #     from peft.tuners.lora import LoraLayer
         #
@@ -2174,7 +2182,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
         self.projector = nn.Dense(config.hidden_size, config.tdnn_dim[0])
 
         tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
-        self.tdnn = nn.CellList(tdnn_layers)
+        self.tdnn = nn.ModuleList(tdnn_layers)
 
         self.feature_extractor = nn.Dense(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
         self.classifier = nn.Dense(config.xvector_output_dim, config.xvector_output_dim)
@@ -2225,7 +2233,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
         return input_lengths
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,

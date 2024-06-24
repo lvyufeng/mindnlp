@@ -180,7 +180,7 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
+        # create random MindSpore tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
         for image in image_inputs:

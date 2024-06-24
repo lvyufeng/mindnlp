@@ -21,7 +21,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.modules.functional import finfo
@@ -103,7 +105,7 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
         out.set_data(Tensor(out_np, out.dtype))
         return out
 
-    def construct(self, input_ids_shape, past_key_values_length: int = 0) -> mindspore.Tensor:
+    def forward(self, input_ids_shape, past_key_values_length: int = 0) -> mindspore.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = ops.arange(
@@ -113,7 +115,7 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Pegasus
-class PegasusAttention(nn.Cell):
+class PegasusAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -159,10 +161,10 @@ class PegasusAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -182,7 +184,7 @@ class PegasusAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -306,12 +308,12 @@ PEGASUS_ATTENTION_CLASSES = {"eager": PegasusAttention}
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Pegasus, MBART->PEGASUS
-class PegasusEncoderLayer(nn.Cell):
+class PegasusEncoderLayer(nn.Module):
 
     '''
     The PegasusEncoderLayer class represents a single layer of the Pegasus encoder. This layer includes self-attention, feed-forward neural network (FFN) processing, and layer normalization. 
     
-    This class inherits from nn.Cell and has the following attributes:
+    This class inherits from nn.Module and has the following attributes:
     - embed_dim: The dimension of the input embeddings
     - self_attn: The self-attention mechanism used in the layer
     - self_attn_layer_norm: The layer normalization applied after self-attention
@@ -358,15 +360,17 @@ class PegasusEncoderLayer(nn.Cell):
             dropout=config.attention_dropout,
             config=config,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, epsilon=1e-5)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=
+1e-5)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Dense(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim, epsilon=1e-5)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=
+1e-5)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -418,12 +422,12 @@ class PegasusEncoderLayer(nn.Cell):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Pegasus, MBART->PEGASUS
-class PegasusDecoderLayer(nn.Cell):
+class PegasusDecoderLayer(nn.Module):
 
     """
     The PegasusDecoderLayer class represents a single layer of the Pegasus decoder model. 
     It includes self-attention and encoder-decoder cross-attention mechanisms followed by feedforward neural network layers. 
-    This class inherits from nn.Cell and implements the decoding logic for the Pegasus model.
+    This class inherits from nn.Module and implements the decoding logic for the Pegasus model.
     
     Attributes:
         - embed_dim (int): The dimension of the embeddings used in the layer.
@@ -488,7 +492,8 @@ class PegasusDecoderLayer(nn.Cell):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, epsilon=1e-5)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=
+1e-5)
         self.encoder_attn = PEGASUS_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
@@ -496,12 +501,14 @@ class PegasusDecoderLayer(nn.Cell):
             is_decoder=True,
             config=config,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, epsilon=1e-5)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=
+1e-5)
         self.fc1 = nn.Dense(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim, epsilon=1e-5)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=
+1e-5)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -609,7 +616,7 @@ for weights based on the specified standard deviation and initializes biases or 
         
         Args:
             self (PegasusPreTrainedModel): The instance of the PegasusPreTrainedModel class.
-            cell (nn.Cell): The cell for which the weights are to be initialized.
+            cell (nn.Module): The cell for which the weights are to be initialized.
         
         Returns:
             None: This method does not return any value.
@@ -675,8 +682,8 @@ class PegasusEncoder(PegasusPreTrainedModel):
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.CellList([PegasusEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layer_norm = nn.LayerNorm(config.d_model, epsilon=1e-5)
+        self.layers = nn.ModuleList([PegasusEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=1e-5)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -710,7 +717,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
         """
         return self.embed_positions
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -885,8 +892,8 @@ class PegasusDecoder(PegasusPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.CellList([PegasusDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layer_norm = nn.LayerNorm(config.d_model, epsilon=1e-5)
+        self.layers = nn.ModuleList([PegasusDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layer_norm = nn.LayerNorm(config.d_model, eps=1e-5)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -951,7 +958,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
         """
         return self.embed_positions
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1167,7 +1174,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
 class PegasusModel(PegasusPreTrainedModel):
 
     """
-    The `PegasusModel` class is a PyTorch-based model implementation for Pegasus, a pre-trained model for abstractive text summarization. It is a subclass of `PegasusPreTrainedModel`, which provides common
+    The `PegasusModel` class is a MindSpore-based model implementation for Pegasus, a pre-trained model for abstractive text summarization. It is a subclass of `PegasusPreTrainedModel`, which provides common
 methods and attributes for all Pegasus model variants.
     
     The `PegasusModel` class has the following methods:
@@ -1310,7 +1317,7 @@ Pegasus model by encoding the input and decoding it with the provided decoder in
         """
         return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1453,7 +1460,7 @@ Union[Tuple, Seq2SeqLMOutput]: Constructs the Pegasus model.
         super().__init__(config)
         self.model = PegasusModel(config)
         self.final_logits_bias = ops.zeros((1, self.model.shared.vocab_size))
-        self.lm_head = nn.Dense(config.d_model, self.model.shared.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, self.model.shared.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1592,7 +1599,7 @@ with the original tensor along the column axis. Finally, the self.final_logits_b
         """
         return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1811,7 +1818,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         super().__init__(config)
         self.decoder = PegasusDecoder(config)
 
-    def construct(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Method 'construct' in the class 'PegasusDecoderWrapper'.
         
@@ -1893,7 +1900,7 @@ loss, past key values, hidden states, attentions, and cross attentions.
         super().__init__(config)
         self.model = PegasusDecoderWrapper(config)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2019,7 +2026,7 @@ loss, past key values, hidden states, attentions, and cross attentions.
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-base->google/pegasus-large
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

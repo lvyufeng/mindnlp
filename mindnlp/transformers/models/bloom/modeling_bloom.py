@@ -21,7 +21,9 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -117,11 +119,11 @@ def dropout_add(x: mindspore.Tensor, residual: mindspore.Tensor, prob: float, tr
     return out
 
 
-class BloomAttention(nn.Cell):
+class BloomAttention(nn.Module):
 
     """
     BloomAttention class represents an attention mechanism used in neural network models for processing sequential data. 
-    This class inherits from nn.Cell and includes methods for initializing the attention mechanism, splitting and merging heads, 
+    This class inherits from nn.Module and includes methods for initializing the attention mechanism, splitting and merging heads, 
     and constructing the attention mechanism for a specific layer. The attention mechanism involves performing operations on 
     query, key, and value tensors to compute attention scores and produce context layers. Additionally, it supports features 
     such as caching past layers, applying attention masks, and handling head masks. The class also provides options for 
@@ -167,7 +169,7 @@ class BloomAttention(nn.Cell):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = 1.0
 
-        self.query_key_value = nn.Dense(self.hidden_size, 3 * self.hidden_size, has_bias=True)
+        self.query_key_value = nn.Dense(self.hidden_size, 3 * self.hidden_size, bias=True)
         self.dense = nn.Dense(self.hidden_size, self.hidden_size)
         self.attention_dropout = nn.Dropout(p=config.attention_dropout)
 
@@ -212,7 +214,7 @@ class BloomAttention(nn.Cell):
         # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
         return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         residual: mindspore.Tensor,
@@ -324,10 +326,10 @@ class BloomAttention(nn.Cell):
         return outputs
 
 
-class BloomMLP(nn.Cell):
+class BloomMLP(nn.Module):
 
     """
-    BloomMLP is a multi-layer perceptron (MLP) that is used for pre-training in natural language processing (NLP) tasks. This class inherits from nn.Cell and implements the forward propagation logic for the
+    BloomMLP is a multi-layer perceptron (MLP) that is used for pre-training in natural language processing (NLP) tasks. This class inherits from nn.Module and implements the forward propagation logic for the
 MLP. 
     
     Attributes:
@@ -376,7 +378,7 @@ MLP.
         self.dense_4h_to_h = nn.Dense(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
 
-    def construct(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output tensor for the BloomMLP model.
         
@@ -411,7 +413,7 @@ MLP.
         return output
 
 
-class BloomBlock(nn.Cell):
+class BloomBlock(nn.Module):
 
     """
     This class represents a block of the Bloom transformer model. It contains layers for self-attention and multi-layer perceptron (MLP) operations.
@@ -461,17 +463,17 @@ class BloomBlock(nn.Cell):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.input_layernorm = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.input_layernorm = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
         self.num_heads = config.n_head
         self.self_attention = BloomAttention(config)
-        self.post_attention_layernorm = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
 
         self.mlp = BloomMLP(config)
 
         self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
         self.hidden_dropout = config.hidden_dropout
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         alibi: mindspore.Tensor,
@@ -632,7 +634,7 @@ class BloomModel(BloomPreTrainedModel):
         - num_heads (int): The number of attention heads in the model.
         - word_embeddings (nn.Embedding): The word embeddings layer.
         - word_embeddings_layernorm (nn.LayerNorm): Layer normalization for word embeddings.
-        - h (nn.CellList): List of BloomBlocks representing the hidden layers of the model.
+        - h (nn.ModuleList): List of BloomBlocks representing the hidden layers of the model.
         - ln_f (nn.LayerNorm): Layer normalization for the final hidden states.
         - gradient_checkpointing (bool): Flag indicating whether gradient checkpointing is enabled.
     
@@ -671,13 +673,13 @@ class BloomModel(BloomPreTrainedModel):
 
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.word_embeddings_layernorm = nn.LayerNorm([self.embed_dim], epsilon=config.layer_norm_epsilon)
+        self.word_embeddings_layernorm = nn.LayerNorm([self.embed_dim], eps=config.layer_norm_epsilon)
 
         # Transformer blocks
-        self.h = nn.CellList([BloomBlock(config) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([BloomBlock(config) for _ in range(config.num_hidden_layers)])
 
         # Final Layer Norm
-        self.ln_f = nn.LayerNorm([self.embed_dim], epsilon=config.layer_norm_epsilon)
+        self.ln_f = nn.LayerNorm([self.embed_dim], eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
@@ -738,7 +740,7 @@ class BloomModel(BloomPreTrainedModel):
         """
         self.word_embeddings = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -935,7 +937,7 @@ cache to match the beam indices during beam search or beam sampling.
         """
         super().__init__(config)
         self.transformer = BloomModel(config)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1031,7 +1033,7 @@ cache to match the beam indices during beam search or beam sampling.
         )
         return model_inputs
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -1155,12 +1157,12 @@ removed in future versions. Additionally, the method supports the use of padding
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = BloomModel(config)
-        self.score = nn.Dense(config.hidden_size, config.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, config.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -1333,7 +1335,7 @@ Optional[bool] = None, output_hidden_states: Optional[bool] = None, return_dict:
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -1436,7 +1438,7 @@ BloomForQuestionAnswering class includes methods for model construction and infe
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

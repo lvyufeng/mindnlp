@@ -69,8 +69,8 @@ class AlignProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or MindSpore
+                tensor. In case of a NumPy array/MindSpore tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
                 Activates and controls padding for tokenization of input text. Choose between [`True` or `'longest'`,
@@ -82,7 +82,7 @@ class AlignProcessor(ProcessorMixin):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 

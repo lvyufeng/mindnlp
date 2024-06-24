@@ -553,7 +553,7 @@ class SegGptImageProcessor(BaseImageProcessor):
     ):
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
-        PyTorch.
+        MindSpore.
 
         Args:
             outputs ([`SegGptImageSegmentationOutput`]):

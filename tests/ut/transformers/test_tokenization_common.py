@@ -296,7 +296,7 @@ class TokenizerTesterMixin:
                 "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
                 "general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
                 "Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained "
-                "models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow.",
+                "models in 100+ languages and deep interoperability between Jax, MindSpore and TensorFlow.",
                 "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
                 "conditioning on both left and right context in all layers.",
                 "The quick brown fox jumps over the lazy dog.",

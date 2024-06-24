@@ -21,7 +21,10 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 import numpy as np
 import mindspore
-from mindspore import ops, nn
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import (
@@ -54,10 +57,10 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class GPT2Attention(nn.Cell):
+class GPT2Attention(nn.Module):
 
     """
-    The `GPT2Attention` class represents the attention mechanism used in the GPT-2 model. It is a subclass of the `nn.Cell` class.
+    The `GPT2Attention` class represents the attention mechanism used in the GPT-2 model. It is a subclass of the `nn.Module` class.
     
     Summary:
         This class implements the attention mechanism in GPT-2, which is used for self-attention within the model or cross-attention between the model and an encoder.
@@ -320,7 +323,7 @@ attention mechanism.
         new_shape = tensor.shape[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def construct(
+    def forward(
         self,
         hidden_states: Optional[Tuple[mindspore.Tensor]],
         layer_past: Optional[Tuple[mindspore.Tensor]] = None,
@@ -394,12 +397,12 @@ attention mechanism.
         return outputs  # a, present, (attentions)
 
 
-class GPT2MLP(nn.Cell):
+class GPT2MLP(nn.Module):
 
     """
     This class represents a multi-layer perceptron (MLP) component of the GPT-2 model. It is used to process the hidden states in the model architecture.
     
-    The GPT2MLP class inherits from the nn.Cell class and contains methods for initializing the MLP and constructing the hidden states.
+    The GPT2MLP class inherits from the nn.Module class and contains methods for initializing the MLP and constructing the hidden states.
     
     Attributes:
         c_fc (Conv1D): A 1D convolutional layer used for intermediate processing of the hidden states.
@@ -437,7 +440,7 @@ class GPT2MLP(nn.Cell):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(p=config.resid_pdrop)
 
-    def construct(self, hidden_states: Optional[Tuple[mindspore.Tensor]]) -> mindspore.Tensor:
+    def forward(self, hidden_states: Optional[Tuple[mindspore.Tensor]]) -> mindspore.Tensor:
         """
         Constructs a GPT2MLP model by applying a series of operations on the input hidden states.
         
@@ -468,12 +471,12 @@ class GPT2MLP(nn.Cell):
         return hidden_states
 
 
-class GPT2Block(nn.Cell):
+class GPT2Block(nn.Module):
 
     """
     This class represents a single block of the GPT2 (Generative Pretrained Transformer 2) model. 
     
-    GPT2Block is a subclass of nn.Cell and contains the following attributes:
+    GPT2Block is a subclass of nn.Module and contains the following attributes:
     - ln_1: A LayerNorm module for layer normalization.
     - attn: An instance of the GPT2Attention class for self-attention mechanism.
     - ln_2: A LayerNorm module for layer normalization.
@@ -532,17 +535,17 @@ forward pass of the GPT2Block.
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
         self.attn = GPT2Attention(config, layer_idx=layer_idx)
-        self.ln_2 = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.ln_2 = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             self.crossattention = GPT2Attention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+            self.ln_cross_attn = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
 
         self.mlp = GPT2MLP(inner_dim, config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: Optional[Tuple[mindspore.Tensor]],
         layer_past: Optional[Tuple[mindspore.Tensor]] = None,
@@ -755,8 +758,8 @@ output_hidden_states, return_dict): Constructs the GPT-2 model for inference or 
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(p=config.embd_pdrop)
-        self.h = nn.CellList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm([self.embed_dim], epsilon=config.layer_norm_epsilon)
+        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.ln_f = nn.LayerNorm([self.embed_dim], eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -809,7 +812,7 @@ initial input to the model and are typically generated by applying a word embedd
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1045,7 +1048,7 @@ encoder_attention_mask=None, labels=None, use_cache=None, output_attentions=None
         """
         super().__init__(config)
         self.transformer = GPT2Model(config)
-        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1154,7 +1157,7 @@ the language model. These logits are then used to calculate the probabilities of
 
         return model_inputs
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1268,7 +1271,7 @@ support multiple choice tasks.
         config = copy.deepcopy(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
-        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         # Initialize weights and apply final processing
@@ -1363,7 +1366,7 @@ support multiple choice tasks.
             "token_type_ids": token_type_ids,
         }
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1517,12 +1520,12 @@ config.num_labels - 1]. If config.num_labels == 1, a regression loss is computed
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
-        self.score = nn.Dense(config.n_embd, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.n_embd, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1664,7 +1667,7 @@ based on the specified return format.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1779,7 +1782,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

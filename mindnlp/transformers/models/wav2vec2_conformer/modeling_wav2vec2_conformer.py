@@ -18,7 +18,10 @@ import math
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
-from mindspore import Tensor, nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 import numpy as np
 import mindspore
 from mindspore.common.initializer import Normal
@@ -280,7 +283,7 @@ def _sample_negative_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Cell):
+class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -291,19 +294,19 @@ class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerLayerNormConvLayer(nn.Cell):
+class Wav2Vec2ConformerLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -314,13 +317,13 @@ class Wav2Vec2ConformerLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.layer_norm = nn.LayerNorm([self.out_conv_dim])
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.swapaxes(-2, -1)
@@ -332,7 +335,7 @@ class Wav2Vec2ConformerLayerNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerGroupNormConvLayer(nn.Cell):
+class Wav2Vec2ConformerGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -343,21 +346,21 @@ class Wav2Vec2ConformerGroupNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode='valid'
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
-class WeightNorm(nn.Cell):
+class WeightNorm(nn.Module):
     def __init__(self, wrapped_layer, dim=0):
         super(WeightNorm, self).__init__()
         self.wrapped_layer = wrapped_layer
@@ -370,7 +373,7 @@ class WeightNorm(nn.Cell):
         # 使用 L2Normalize 替换 Norm
         self.l2_normalize = ops.L2Normalize(axis=self.dim)
 
-    def construct(self, x):
+    def forward(self, x):
         # 归一化权重
         self.normalized_weight = self.weight * (self.weight_norm / self.l2_normalize(self.weight))
         # 更新层的权重
@@ -378,7 +381,7 @@ class WeightNorm(nn.Cell):
         return self.wrapped_layer(x)
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerPositionalConvEmbedding(nn.Cell):
+class Wav2Vec2ConformerPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -409,7 +412,7 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Cell):
         self.padding = Wav2Vec2ConformerSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = hidden_states.swapaxes(1, 2)
 
         hidden_states = self.conv(hidden_states)
@@ -420,7 +423,7 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Cell):
+class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
     """
@@ -435,7 +438,7 @@ class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Cell):
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         sequence_length = hidden_states.shape[1]
 
         if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
@@ -454,7 +457,7 @@ class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Cell):
         return self.cached_rotary_positional_embedding
 
 
-class Wav2Vec2ConformerRelPositionalEmbedding(nn.Cell):
+class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
     """Relative positional encoding module."""
 
     def __init__(self, config):
@@ -495,7 +498,7 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Cell):
         pe = ops.cat([pe_positive, pe_negative], axis=1)
         self.pe = pe.to(dtype=x.dtype)
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         self.extend_pe(hidden_states)
         start_idx = self.pe.shape[1] // 2 - hidden_states.shape[1] + 1
         end_idx = self.pe.shape[1] // 2 + hidden_states.shape[1]
@@ -505,19 +508,19 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerSamePadLayer(nn.Cell):
+class Wav2Vec2ConformerSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerFeatureEncoder(nn.Cell):
+class Wav2Vec2ConformerFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -536,7 +539,7 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Cell):
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
-        self.conv_layers = nn.CellList(conv_layers)
+        self.conv_layers = nn.ModuleList(conv_layers)
         # self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -545,7 +548,7 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Cell):
             param.requires_grad = False
         self._requires_grad = False
 
-    def construct(self, input_values):
+    def forward(self, input_values):
         hidden_states = input_values[:, None]
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
@@ -555,14 +558,14 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerFeatureProjection(nn.Cell):
+class Wav2Vec2ConformerFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm([config.conv_dim[-1]], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.conv_dim[-1]], eps=config.layer_norm_eps)
         self.projection = nn.Dense(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(p = config.feat_proj_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
@@ -571,7 +574,7 @@ class Wav2Vec2ConformerFeatureProjection(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerFeedForward(nn.Cell):
+class Wav2Vec2ConformerFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(p = config.activation_dropout)
@@ -585,7 +588,7 @@ class Wav2Vec2ConformerFeedForward(nn.Cell):
         self.output_dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(p = config.hidden_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
@@ -595,7 +598,7 @@ class Wav2Vec2ConformerFeedForward(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2ConformerConvolutionModule(nn.Cell):
+class Wav2Vec2ConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
     def __init__(self, config):
@@ -609,7 +612,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Cell):
             kernel_size=1,
             stride=1,
             padding=0,
-            has_bias=False,
+            bias=False,
             pad_mode='valid'
         )
         self.glu = nn.GLU(axis=1)
@@ -620,7 +623,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Cell):
             stride=1,
             padding=(config.conv_depthwise_kernel_size - 1) // 2,
             group=config.hidden_size,
-            has_bias=False,
+            bias=False,
             pad_mode='pad'
         )
         self.batch_norm = nn.BatchNorm1d(config.hidden_size)
@@ -631,11 +634,11 @@ class Wav2Vec2ConformerConvolutionModule(nn.Cell):
             kernel_size=1,
             stride=1,
             padding=0,
-            has_bias=False,
+            bias=False,
         )
         self.dropout = nn.Dropout(p = config.conformer_conv_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
         # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.swapaxes(1, 2)
@@ -657,7 +660,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2ConformerSelfAttention(nn.Cell):
+class Wav2Vec2ConformerSelfAttention(nn.Module):
     """Construct an Wav2Vec2ConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
@@ -678,13 +681,13 @@ class Wav2Vec2ConformerSelfAttention(nn.Cell):
 
         if self.position_embeddings_type == "relative":
             # linear transformation for positional encoding
-            self.linear_pos = nn.Dense(config.hidden_size, config.hidden_size, has_bias=False)
+            self.linear_pos = nn.Dense(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
             self.pos_bias_u = mindspore.Parameter(ops.zeros(self.num_heads, self.head_size),'pos_bias_u')
             self.pos_bias_v = mindspore.Parameter(ops.zeros(self.num_heads, self.head_size),'pos_bias_v')
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -805,7 +808,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Cell):
         return scores
 
 
-class Wav2Vec2ConformerEncoderLayer(nn.Cell):
+class Wav2Vec2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
     def __init__(self, config):
@@ -830,7 +833,7 @@ class Wav2Vec2ConformerEncoderLayer(nn.Cell):
         self.ffn2 = Wav2Vec2ConformerFeedForward(config)
         self.final_layer_norm = nn.LayerNorm([embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -871,7 +874,7 @@ class Wav2Vec2ConformerEncoderLayer(nn.Cell):
         return hidden_states, attn_weigts
 
 
-class Wav2Vec2ConformerEncoder(nn.Cell):
+class Wav2Vec2ConformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -884,12 +887,12 @@ class Wav2Vec2ConformerEncoder(nn.Cell):
             self.embed_positions = None
 
         self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p = config.hidden_dropout)
-        self.layers = nn.CellList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -967,7 +970,7 @@ class Wav2Vec2ConformerEncoder(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GumbelVectorQuantizer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Cell):
+class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
@@ -1005,7 +1008,7 @@ class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Cell):
         perplexity = ops.exp(-ops.sum(marginal_probs * ops.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
-    def construct(self, hidden_states, mask_time_indices=None):
+    def forward(self, hidden_states, mask_time_indices=None):
         batch_size, sequence_length, hidden_size = hidden_states.shape
 
         # project to codevector dim
@@ -1045,7 +1048,7 @@ class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Adapter with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerAdapter(nn.Cell):
+class Wav2Vec2ConformerAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -1056,10 +1059,10 @@ class Wav2Vec2ConformerAdapter(nn.Cell):
         else:
             self.proj = self.proj_layer_norm = None
 
-        self.layers = nn.CellList([Wav2Vec2ConformerAdapterLayer(config) for _ in range(config.num_adapter_layers)])
+        self.layers = nn.ModuleList([Wav2Vec2ConformerAdapterLayer(config) for _ in range(config.num_adapter_layers)])
         self.layerdrop = config.layerdrop
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -1077,7 +1080,7 @@ class Wav2Vec2ConformerAdapter(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2AdapterLayer with Wav2Vec2->Wav2Vec2Conformer
-class Wav2Vec2ConformerAdapterLayer(nn.Cell):
+class Wav2Vec2ConformerAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -1089,7 +1092,7 @@ class Wav2Vec2ConformerAdapterLayer(nn.Cell):
             pad_mode='pad'
         )
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = ops.glu(hidden_states, axis=1)
 
@@ -1200,8 +1203,8 @@ WAV2VEC2_CONFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch [nn.Cell](https://pyops.org/docs/stable/nn.html#nn.Cell) sub-class. Use it as a
-    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is a MindSpore [nn.Module](https://pyops.org/docs/stable/nn.html#nn.Module) sub-class. Use it as a
+    regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage and behavior.
 
     Parameters:
         config ([`Wav2Vec2ConformerConfig`]): Model configuration class with all the parameters of the model.
@@ -1323,7 +1326,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         return hidden_states
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward with wav2vec2->wav2vec2_conformer
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1431,7 +1434,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         return logits
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,wav2vec2_conformer-base->wav2vec2-conformer-rel-pos-large
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1668,7 +1671,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1774,7 +1777,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1871,7 +1874,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification.forward with wav2vec2->wav2vec2_conformer
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1925,7 +1928,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.AMSoftmaxLoss
-class AMSoftmaxLoss(nn.Cell):
+class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super(AMSoftmaxLoss, self).__init__()
         self.scale = scale
@@ -1936,7 +1939,7 @@ class AMSoftmaxLoss(nn.Cell):
         #self.loss = ops.cross_entropy()
 
 
-    def construct(self, hidden_states, labels):
+    def forward(self, hidden_states, labels):
         labels = labels.flatten()
         weight = self.weight / ops.norm(self.weight, dim=0, keepdim=True)
         hidden_states = hidden_states / ops.norm(hidden_states, dim=1, keepdim=True)
@@ -1950,7 +1953,7 @@ class AMSoftmaxLoss(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.TDNNLayer
-class TDNNLayer(nn.Cell):
+class TDNNLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
@@ -1961,7 +1964,7 @@ class TDNNLayer(nn.Cell):
         self.kernel = nn.Dense(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         # if is_peft_available():
         #     from peft.tuners.lora import LoraLayer
         #     if isinstance(self.kernel, LoraLayer):
@@ -1990,7 +1993,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         self.projector = nn.Dense(config.hidden_size, config.tdnn_dim[0])
 
         tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
-        self.tdnn = nn.CellList(tdnn_layers)
+        self.tdnn = nn.ModuleList(tdnn_layers)
 
         self.feature_extractor = nn.Dense(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
         self.classifier = nn.Dense(config.xvector_output_dim, config.xvector_output_dim)
@@ -2033,7 +2036,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         return input_lengths
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,

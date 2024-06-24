@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch DeiT model."""
+"""MindSpore DeiT model."""
 
 import collections.abc
 import math
@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import Optional, Set, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import TruncatedNormal
 
 from mindnlp._legacy.functional import _scaled_dot_product_attention
@@ -54,7 +56,7 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-class DeiTEmbeddings(nn.Cell):
+class DeiTEmbeddings(nn.Module):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
     """
@@ -108,7 +110,7 @@ class DeiTEmbeddings(nn.Cell):
 
         return ops.cat((class_pos_embed.unsqueeze(0), dist_pos_embed.unsqueeze(0), patch_pos_embed), axis=1)
 
-    def construct(
+    def forward(
         self,
         pixel_values: ms.Tensor,
         bool_masked_pos: Optional[ms.Tensor] = None,
@@ -140,7 +142,7 @@ class DeiTEmbeddings(nn.Cell):
         return embeddings
 
 
-class DeiTPatchEmbeddings(nn.Cell):
+class DeiTPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -161,9 +163,9 @@ class DeiTPatchEmbeddings(nn.Cell):
         self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size,
-                                    padding=0, pad_mode="valid", has_bias=True)
+                                    padding=0, pad_mode="valid", bias=True)
 
-    def construct(self, pixel_values: ms.Tensor) -> ms.Tensor:
+    def forward(self, pixel_values: ms.Tensor) -> ms.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -174,7 +176,7 @@ class DeiTPatchEmbeddings(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
-class DeiTSelfAttention(nn.Cell):
+class DeiTSelfAttention(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -187,9 +189,9 @@ class DeiTSelfAttention(nn.Cell):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
+        self.query = nn.Dense(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Dense(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Dense(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
 
@@ -198,7 +200,7 @@ class DeiTSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self, hidden_states, head_mask: Optional[ms.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[ms.Tensor, ms.Tensor], Tuple[ms.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
@@ -240,7 +242,7 @@ class DeiTSdpaSelfAttention(DeiTSelfAttention):
         super().__init__(config)
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
-    def construct(
+    def forward(
         self, hidden_states, head_mask: Optional[ms.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[ms.Tensor, ms.Tensor], Tuple[ms.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
@@ -267,7 +269,7 @@ class DeiTSdpaSelfAttention(DeiTSelfAttention):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DeiT
-class DeiTSelfOutput(nn.Cell):
+class DeiTSelfOutput(nn.Module):
     """
     The residual connection is defined in DeiTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -278,7 +280,7 @@ class DeiTSelfOutput(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -286,7 +288,7 @@ class DeiTSelfOutput(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DeiT
-class DeiTAttention(nn.Cell):
+class DeiTAttention(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.attention = DeiTSelfAttention(config)
@@ -311,7 +313,7 @@ class DeiTAttention(nn.Cell):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         head_mask: Optional[ms.Tensor] = None,
@@ -333,7 +335,7 @@ class DeiTSdpaAttention(DeiTAttention):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
-class DeiTIntermediate(nn.Cell):
+class DeiTIntermediate(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -342,7 +344,7 @@ class DeiTIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -350,13 +352,13 @@ class DeiTIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DeiT
-class DeiTOutput(nn.Cell):
+class DeiTOutput(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -372,7 +374,7 @@ DEIT_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DeiT,VIT->DEIT
-class DeiTLayer(nn.Cell):
+class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DeiTConfig) -> None:
@@ -382,10 +384,10 @@ class DeiTLayer(nn.Cell):
         self.attention = DEIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = DeiTIntermediate(config)
         self.output = DeiTOutput(config)
-        self.layernorm_before = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         head_mask: Optional[ms.Tensor] = None,
@@ -415,14 +417,14 @@ class DeiTLayer(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
-class DeiTEncoder(nn.Cell):
+class DeiTEncoder(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         head_mask: Optional[ms.Tensor] = None,
@@ -498,7 +500,7 @@ class DeiTModel(DeiTPreTrainedModel):
         self.embeddings = DeiTEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = DeiTEncoder(config)
 
-        self.layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.pooler = DeiTPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -515,7 +517,7 @@ class DeiTModel(DeiTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         bool_masked_pos: Optional[ms.Tensor] = None,
@@ -578,13 +580,13 @@ class DeiTModel(DeiTPreTrainedModel):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DeiT
-class DeiTPooler(nn.Cell):
+class DeiTPooler(nn.Module):
     def __init__(self, config: DeiTConfig):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -611,7 +613,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         bool_masked_pos: Optional[ms.Tensor] = None,
@@ -710,7 +712,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         head_mask: Optional[ms.Tensor] = None,
@@ -849,7 +851,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         head_mask: Optional[ms.Tensor] = None,

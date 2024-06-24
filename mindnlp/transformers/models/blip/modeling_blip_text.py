@@ -18,7 +18,9 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from ...activations import ACT2FN
@@ -41,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L52
-class BlipTextEmbeddings(nn.Cell):
+class BlipTextEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
     def __init__(self, config):
         """
@@ -71,7 +73,8 @@ class BlipTextEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -80,7 +83,7 @@ class BlipTextEmbeddings(nn.Cell):
 
         self.config = config
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         position_ids: Optional[mindspore.Tensor] = None,
@@ -130,12 +133,12 @@ class BlipTextEmbeddings(nn.Cell):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L97
-class BlipTextSelfAttention(nn.Cell):
+class BlipTextSelfAttention(nn.Module):
 
     """
     A class representing self-attention mechanism for BlipText models.
     
-    This class inherits from nn.Cell and implements the self-attention mechanism for BlipText models. 
+    This class inherits from nn.Module and implements the self-attention mechanism for BlipText models. 
     It includes methods for saving and retrieving attention gradients and maps, as well as methods for constructing self-attention scores and context layers.
     
     Attributes:
@@ -290,7 +293,7 @@ class BlipTextSelfAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -394,12 +397,12 @@ class BlipTextSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert -> BlipText
-class BlipTextSelfOutput(nn.Cell):
+class BlipTextSelfOutput(nn.Module):
 
     """
     This class represents the self-output layer of the BlipText model in the MindSpore library.
     
-    The BlipTextSelfOutput class is a subclass of the nn.Cell class, and it is responsible for applying various transformations to the hidden states of the BlipText model's self-attention layer. It performs
+    The BlipTextSelfOutput class is a subclass of the nn.Module class, and it is responsible for applying various transformations to the hidden states of the BlipText model's self-attention layer. It performs
 dense linear transformation, dropout, layer normalization, and residual connection to produce the final hidden states.
     
     Attributes:
@@ -444,10 +447,11 @@ dense linear transformation, dropout, layer normalization, and residual connecti
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the self-attention output of the BlipText model.
         
@@ -472,12 +476,12 @@ dense linear transformation, dropout, layer normalization, and residual connecti
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#242
-class BlipTextAttention(nn.Cell):
+class BlipTextAttention(nn.Module):
 
     """
     A class that represents a self-attention mechanism for BlipText.
     
-    This class inherits from nn.Cell and implements methods for initializing, pruning heads, and constructing self-attention.
+    This class inherits from nn.Module and implements methods for initializing, pruning heads, and constructing self-attention.
     
     Attributes:
         self (BlipTextSelfAttention): An instance of BlipTextSelfAttention for self-attention mechanism.
@@ -566,7 +570,7 @@ obtained from the 'find_pruneable_heads_and_indices' function.
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -610,10 +614,10 @@ obtained from the 'find_pruneable_heads_and_indices' function.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert -> BlipText
-class BlipTextIntermediate(nn.Cell):
+class BlipTextIntermediate(nn.Module):
 
     """
-    This class represents a BlipTextIntermediate module that is used for intermediate processing of text data. It is a subclass of nn.Cell and provides functionality for constructing hidden states.
+    This class represents a BlipTextIntermediate module that is used for intermediate processing of text data. It is a subclass of nn.Module and provides functionality for constructing hidden states.
     
     Attributes:
         dense (nn.Dense): A dense layer that applies linear transformation to the input hidden states.
@@ -648,7 +652,7 @@ class BlipTextIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the BlipTextIntermediate.
         
@@ -683,10 +687,10 @@ class BlipTextIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert -> BlipText
-class BlipTextOutput(nn.Cell):
+class BlipTextOutput(nn.Module):
 
     """
-    This class represents a BlipTextOutput module that is used in neural network models for natural language processing tasks. It is a subclass of nn.Cell and is responsible for constructing the output of the
+    This class represents a BlipTextOutput module that is used in neural network models for natural language processing tasks. It is a subclass of nn.Module and is responsible for constructing the output of the
 Blip model.
     
     Attributes:
@@ -723,10 +727,11 @@ input tensor to the hidden states.
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a BlipTextOutput by applying a series of operations on the given hidden states and input tensor.
         
@@ -747,11 +752,11 @@ input tensor to the hidden states.
         return hidden_states
 
 
-class BlipTextLayer(nn.Cell):
+class BlipTextLayer(nn.Module):
 
     """
     The BlipTextLayer class represents a layer of a neural network model for text processing. It is designed to handle self-attention and cross-attention mechanisms, and it can be used as part of a transformer
-architecture. This class inherits from nn.Cell and contains methods for initialization and constructing the layer.
+architecture. This class inherits from nn.Module and contains methods for initialization and constructing the layer.
     
     Attributes:
         - config: A configuration object for the layer.
@@ -798,7 +803,7 @@ processing.
         self.intermediate = BlipTextIntermediate(config)
         self.output = BlipTextOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -881,10 +886,10 @@ processing.
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
-class BlipTextEncoder(nn.Cell):
+class BlipTextEncoder(nn.Module):
 
     """
-    This class represents a BlipTextEncoder module that is used for encoding text data. It inherits from the nn.Cell class.
+    This class represents a BlipTextEncoder module that is used for encoding text data. It inherits from the nn.Module class.
     
     Attributes:
         - config: The configuration object for the BlipTextEncoder module.
@@ -933,10 +938,10 @@ and cross-attentions. The method also allows for customization of the output for
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([BlipTextLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BlipTextLayer(config, i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1054,10 +1059,10 @@ and cross-attentions. The method also allows for customization of the output for
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BlipText
-class BlipTextPooler(nn.Cell):
+class BlipTextPooler(nn.Module):
 
     """
-    The BlipTextPooler class represents a text pooler for Blip model. It inherits from the nn.Cell class. 
+    The BlipTextPooler class represents a text pooler for Blip model. It inherits from the nn.Module class. 
     
     The class's code includes an __init__ method that initializes the BlipTextPooler object with the provided configuration. It also contains a construct method that takes hidden_states as input and returns
 the pooled output after applying dense and activation operations.
@@ -1092,7 +1097,7 @@ the pooled output after applying dense and activation operations.
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the pooled output tensor for the BlipTextPooler class.
         
@@ -1128,11 +1133,11 @@ the pooled output after applying dense and activation operations.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->BlipText
-class BlipTextPredictionHeadTransform(nn.Cell):
+class BlipTextPredictionHeadTransform(nn.Module):
 
     """
     This class represents a transformation module used in a BlipText prediction head. 
-    It inherits from the nn.Cell class and is responsible for transforming the input hidden states.
+    It inherits from the nn.Module class and is responsible for transforming the input hidden states.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that transforms the input hidden states.
@@ -1168,9 +1173,10 @@ activation function itself.
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method 'construct' is a part of the class 'BlipTextPredictionHeadTransform' and is used to perform transformations on the input hidden states tensor.
         
@@ -1192,10 +1198,10 @@ exceptions from underlying operations.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->BlipText
-class BlipTextLMPredictionHead(nn.Cell):
+class BlipTextLMPredictionHead(nn.Module):
 
     """
-    This class represents the prediction head for a BlipText language model. It is a subclass of nn.Cell.
+    This class represents the prediction head for a BlipText language model. It is a subclass of nn.Module.
     
     Attributes:
         transform (BlipTextPredictionHeadTransform): An instance of BlipTextPredictionHeadTransform class that performs transformation on the input hidden states.
@@ -1238,14 +1244,14 @@ class BlipTextLMPredictionHead(nn.Cell):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = Parameter(ops.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs the prediction head for the BlipTextLMPredictionHead class.
         
@@ -1265,11 +1271,11 @@ class BlipTextLMPredictionHead(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->BlipText
-class BlipTextOnlyMLMHead(nn.Cell):
+class BlipTextOnlyMLMHead(nn.Module):
 
     """A class representing the BlipTextOnlyMLMHead.
     
-    BlipTextOnlyMLMHead is a subclass of nn.Cell that is used for multi-label classification tasks in natural language processing. It is specifically designed for predicting masked tokens in a given sequence.
+    BlipTextOnlyMLMHead is a subclass of nn.Module that is used for multi-label classification tasks in natural language processing. It is specifically designed for predicting masked tokens in a given sequence.
     
     Attributes:
         predictions (BlipTextLMPredictionHead): An instance of the BlipTextLMPredictionHead class that performs the actual prediction of masked tokens.
@@ -1296,7 +1302,7 @@ class BlipTextOnlyMLMHead(nn.Cell):
         super().__init__()
         self.predictions = BlipTextLMPredictionHead(config)
 
-    def construct(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
         """
         Method 'construct' in the class 'BlipTextOnlyMLMHead'.
         
@@ -1476,7 +1482,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1699,7 +1705,7 @@ or further analysis.
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

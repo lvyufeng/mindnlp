@@ -22,7 +22,9 @@ from typing import Optional, Set, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 from mindnlp.utils import (
     ModelOutput,
@@ -107,7 +109,7 @@ def get_sinusoid_encoding_table(n_position, d_hid):
     return mindspore.Tensor(sinusoid_table).unsqueeze(0)
 
 
-class VideoMAEEmbeddings(nn.Cell):
+class VideoMAEEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
 
@@ -122,7 +124,7 @@ class VideoMAEEmbeddings(nn.Cell):
         self.position_embeddings = get_sinusoid_encoding_table(self.num_patches, config.hidden_size)
         self.config = config
 
-    def construct(self, pixel_values, bool_masked_pos):
+    def forward(self, pixel_values, bool_masked_pos):
         # create patch embeddings
         embeddings = self.patch_embeddings(pixel_values)
 
@@ -140,7 +142,7 @@ class VideoMAEEmbeddings(nn.Cell):
         return embeddings
 
 
-class VideoMAEPatchEmbeddings(nn.Cell):
+class VideoMAEPatchEmbeddings(nn.Module):
     """
     Video to Patch Embedding. This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
     height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
@@ -175,10 +177,10 @@ class VideoMAEPatchEmbeddings(nn.Cell):
             out_channels=hidden_size,
             kernel_size=(self.tubelet_size, patch_size[0], patch_size[1]),
             stride=(self.tubelet_size, patch_size[0], patch_size[1]),
-            has_bias=True
+            bias=True
         )
 
-    def construct(self, pixel_values):
+    def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -195,7 +197,7 @@ class VideoMAEPatchEmbeddings(nn.Cell):
         return embeddings
 
 
-class VideoMAESelfAttention(nn.Cell):
+class VideoMAESelfAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -208,9 +210,9 @@ class VideoMAESelfAttention(nn.Cell):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size, has_bias=False)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=False)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size, has_bias=False)
+        self.query = nn.Dense(config.hidden_size, self.all_head_size, bias=False)
+        self.key = nn.Dense(config.hidden_size, self.all_head_size, bias=False)
+        self.value = nn.Dense(config.hidden_size, self.all_head_size, bias=False)
 
         if config.qkv_bias:
             self.q_bias = mindspore.Parameter(ops.zeros([self.all_head_size]),name="q_bias")
@@ -226,7 +228,7 @@ class VideoMAESelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self, hidden_states, head_mask: Optional[mindspore.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[mindspore.Tensor, mindspore.Tensor], Tuple[mindspore.Tensor]]:
         if self.q_bias is not None:
@@ -269,7 +271,7 @@ class VideoMAESelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
-class VideoMAESelfOutput(nn.Cell):
+class VideoMAESelfOutput(nn.Module):
     """
     The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -280,7 +282,7 @@ class VideoMAESelfOutput(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -288,7 +290,7 @@ class VideoMAESelfOutput(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
-class VideoMAEAttention(nn.Cell):
+class VideoMAEAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         self.attention = VideoMAESelfAttention(config)
@@ -313,7 +315,7 @@ class VideoMAEAttention(nn.Cell):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -329,7 +331,7 @@ class VideoMAEAttention(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
-class VideoMAEIntermediate(nn.Cell):
+class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -338,7 +340,7 @@ class VideoMAEIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -346,13 +348,13 @@ class VideoMAEIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->VideoMAE
-class VideoMAEOutput(nn.Cell):
+class VideoMAEOutput(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -365,7 +367,7 @@ VIDEOMAE_ATTENTION_CLASSES = {"eager": VideoMAEAttention, "sdpa": VideoMAEAttent
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
-class VideoMAELayer(nn.Cell):
+class VideoMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: VideoMAEConfig) -> None:
@@ -375,10 +377,10 @@ class VideoMAELayer(nn.Cell):
         self.attention = VIDEOMAE_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = VideoMAEIntermediate(config)
         self.output = VideoMAEOutput(config)
-        self.layernorm_before = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -408,14 +410,14 @@ class VideoMAELayer(nn.Cell):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
-class VideoMAEEncoder(nn.Cell):
+class VideoMAEEncoder(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([VideoMAELayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([VideoMAELayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -479,7 +481,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
             # `trunc_normal_cpu` not implemented in `half` issues
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.LayerNorm):
             cell.weight.set_data(initializer('ones', cell.weight.shape, cell.weight.dtype))
@@ -496,7 +498,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         if config.use_mean_pooling:
             self.layernorm = None
         else:
-            self.layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+            self.layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -513,7 +515,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         bool_masked_pos: Optional[mindspore.Tensor] = None,
@@ -557,7 +559,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         )
 
 
-class VideoMAEDecoder(nn.Cell):
+class VideoMAEDecoder(nn.Module):
     def __init__(self, config, num_patches):
         super().__init__()
 
@@ -568,7 +570,7 @@ class VideoMAEDecoder(nn.Cell):
         decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.CellList(
+        self.decoder_layers = nn.ModuleList(
             [VideoMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
         )
 
@@ -580,7 +582,7 @@ class VideoMAEDecoder(nn.Cell):
         self.gradient_checkpointing = False
         self.config = config
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         return_token_num,
@@ -632,7 +634,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         self.videomae = VideoMAEModel(config)
 
-        self.encoder_to_decoder = nn.Dense(config.hidden_size, config.decoder_hidden_size, has_bias=False)
+        self.encoder_to_decoder = nn.Dense(config.hidden_size, config.decoder_hidden_size, bias=False)
         self.mask_token = mindspore.Parameter(ops.zeros((1, 1, config.decoder_hidden_size)),name="mask_token")
         self.position_embeddings = get_sinusoid_encoding_table(
             self.videomae.embeddings.num_patches, config.decoder_hidden_size
@@ -643,7 +645,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         bool_masked_pos: mindspore.Tensor,
@@ -780,13 +782,14 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         self.videomae = VideoMAEModel(config)
 
         # Classifier head
-        self.fc_norm = nn.LayerNorm([config.hidden_size], epsilon=1e-5) if config.use_mean_pooling else None
+        self.fc_norm = nn.LayerNorm([config.hidden_size], eps=
+1e-5) if config.use_mean_pooling else None
         self.classifier = nn.Dense(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,

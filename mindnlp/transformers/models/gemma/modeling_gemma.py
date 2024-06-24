@@ -21,7 +21,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -66,11 +69,11 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class GemmaRMSNorm(nn.Cell):
+class GemmaRMSNorm(nn.Module):
 
     """
     This class represents a custom implementation of Root Mean Square Normalization (RMSNorm) called GemmaRMSNorm, which is designed for neural network operations. 
-    It inherits from the nn.Cell class. 
+    It inherits from the nn.Module class. 
     The GemmaRMSNorm class initializes with parameters for dimension and epsilon value, and includes methods for calculating the normalized output based on the input data and weight parameters.
     The _norm method calculates the normalized output based on the input data and epsilon value.
     The construct method applies the normalization and weight parameters to the input data to generate the final output.
@@ -128,7 +131,7 @@ class GemmaRMSNorm(nn.Cell):
         """
         return x * ops.rsqrt(x.pow(2).mean(-1, keep_dims=True) + self.eps)
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a normalized tensor using the GemmaRMSNorm algorithm.
         
@@ -149,10 +152,10 @@ class GemmaRMSNorm(nn.Cell):
 ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 
 
-class GemmaRotaryEmbedding(nn.Cell):
+class GemmaRotaryEmbedding(nn.Module):
 
     """
-    This class represents a GemmaRotaryEmbedding module, which is a custom embedding layer used in neural networks. It inherits from the nn.Cell class.
+    This class represents a GemmaRotaryEmbedding module, which is a custom embedding layer used in neural networks. It inherits from the nn.Module class.
     
     The GemmaRotaryEmbedding module is designed to construct rotary embeddings for input data sequences. It creates embeddings based on the positions in the input sequence, using a sinusoidal function. The
 embeddings are computed as the cosine and sine of the frequency values derived from the positions.
@@ -206,7 +209,7 @@ embeddings are computed as the cosine and sine of the frequency values derived f
         self.base = base
         self.inv_freq = None
 
-    def construct(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids, seq_len=None):
         """
         Constructs GemmaRotaryEmbedding for positional encoding.
         
@@ -275,10 +278,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
-class GemmaMLP(nn.Cell):
+class GemmaMLP(nn.Module):
 
     """
-    GemmaMLP is a class representing a multi-layer perceptron (MLP) model for neural network operations. It inherits from nn.Cell and implements functionality for constructing the MLP.
+    GemmaMLP is a class representing a multi-layer perceptron (MLP) model for neural network operations. It inherits from nn.Module and implements functionality for constructing the MLP.
     
     Attributes:
         config: A configuration object containing parameters for the MLP.
@@ -314,12 +317,12 @@ class GemmaMLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a multi-layer perceptron using the GemmaMLP class.
         
@@ -350,7 +353,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class GemmaAttention(nn.Cell):
+class GemmaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     # Ignore copy
     def __init__(self, config: GemmaConfig, layer_idx: Optional[int] = None):
@@ -433,17 +436,17 @@ class GemmaAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.attention_bias)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=config.attention_bias)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = GemmaRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -534,10 +537,10 @@ GEMMA_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->Gemma
-class GemmaDecoderLayer(nn.Cell):
+class GemmaDecoderLayer(nn.Module):
 
     """
-    The GemmaDecoderLayer class represents a single layer of the Gemma decoder. It inherits from the nn.Cell class and provides methods for constructing the decoder layer.
+    The GemmaDecoderLayer class represents a single layer of the Gemma decoder. It inherits from the nn.Module class and provides methods for constructing the decoder layer.
     
     Attributes:
         hidden_size (int): The size of the hidden states in the layer.
@@ -591,7 +594,7 @@ attention is used.
         self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -689,7 +692,7 @@ cache, and resetting cache.
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -785,7 +788,7 @@ class GemmaModel(GemmaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -829,7 +832,7 @@ class GemmaModel(GemmaPreTrainedModel):
         self.embed_tokens = value
 
     # Ignore copy
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1055,7 +1058,7 @@ text generation.
         super().__init__(config)
         self.model = GemmaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1166,7 +1169,7 @@ text generation.
         return self.model
 
     # Ignore copy
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1442,7 +1445,7 @@ classification and returns the model outputs.
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GemmaModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1479,7 +1482,7 @@ classification and returns the model outputs.
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

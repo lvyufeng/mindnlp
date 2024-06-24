@@ -140,21 +140,24 @@ class GroupNorm(Module):
         self.eps = eps
         self.affine = affine
         if self.affine:
-            self.weight = Parameter(torch.Tensor(num_channels))
-            self.bias = Parameter(torch.Tensor(num_channels))
+            self.weight = Parameter(initializer('ones', (num_channels, )))
+            self.bias = Parameter(initializer('zeros', (num_channels, )))
         else:
             self.register_parameter('weight', None)
             self.register_parameter('bias', None)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        if self.affine:
-            self.weight.data.fill_(1)
-            self.bias.data.zero_()
 
     def forward(self, input):
-        return F.group_norm(
-            input, self.num_groups, self.weight, self.bias, self.eps)
+        batch, channel, height, width = input.shape
+        input = input.reshape(batch, self.num_groups, -1)
+        mean = ops.mean(input, axis=2, keep_dims=True)
+        var = ops.div(ops.sum(ops.square(ops.sub(input, mean)), 2, keepdim=True), (channel * height * width / self.num_groups))
+        std = ops.sqrt(var + self.eps)
+        input = ops.div(ops.sub(input, mean), std)
+        input = input.reshape(batch, channel, height, width)
+        output = ops.add(x * self.weight.reshape(-1, 1, 1), self.bias.reshape(-1, 1, 1))
+        return output
+
+
 
     def extra_repr(self):
         return '{num_groups}, {num_channels}, eps={eps}, ' \

@@ -22,7 +22,9 @@ import math
 from typing import List, Optional, Tuple, Union
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -37,9 +39,9 @@ from .configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 
-class LlamaRMSNorm(nn.Cell):
+class LlamaRMSNorm(nn.Module):
 
-    """LlamaRMSNorm is a class that represents a normalization layer, equivalent to T5LayerNorm, used in deep learning models. It inherits from the nn.Cell class.
+    """LlamaRMSNorm is a class that represents a normalization layer, equivalent to T5LayerNorm, used in deep learning models. It inherits from the nn.Module class.
     
     This class provides methods to initialize and apply RMS normalization to the input hidden states. The RMS normalization is calculated based on the variance of the hidden states and a weight parameter. The
 normalized hidden states are then multiplied by the weight parameter to obtain the final output.
@@ -68,7 +70,7 @@ normalized hidden states are then multiplied by the weight parameter to obtain t
         self.weight = Parameter(ops.ones(hidden_size), 'weight')
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """Constructs the RMS normalization of the hidden states.
         
         Args:
@@ -93,10 +95,10 @@ normalized hidden states are then multiplied by the weight parameter to obtain t
 ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
-class LlamaRotaryEmbedding(nn.Cell):
+class LlamaRotaryEmbedding(nn.Module):
 
     """
-    The `LlamaRotaryEmbedding` class represents a rotary positional embedding layer that can be used in neural network models. It inherits from the `nn.Cell` class.
+    The `LlamaRotaryEmbedding` class represents a rotary positional embedding layer that can be used in neural network models. It inherits from the `nn.Module` class.
     
     Attributes:
         dim (int): The dimension of the embedding.
@@ -186,7 +188,7 @@ where frequency_dim is the dimension of the 'inv_freq' tensor.
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs a subset of the cached cosine and sine values based on the given sequence length.
         
@@ -359,12 +361,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class LlamaMLP(nn.Cell):
+class LlamaMLP(nn.Module):
 
     """
     This class represents a multi-layer perceptron (MLP) model called LlamaMLP. 
     
-    LlamaMLP inherits from the nn.Cell class and is designed for deep learning tasks. It consists of multiple layers, including gate projection, up projection, and down projection layers, which are used to
+    LlamaMLP inherits from the nn.Module class and is designed for deep learning tasks. It consists of multiple layers, including gate projection, up projection, and down projection layers, which are used to
 transform the input data and produce the final output.
     
     Attributes:
@@ -410,12 +412,12 @@ computations are performed in a single path.
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs the output of the LlamaMLP model based on the input and configuration settings.
         
@@ -465,7 +467,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class LlamaAttention(nn.Cell):
+class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config: LlamaConfig):
         """
@@ -512,10 +514,10 @@ class LlamaAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.attention_bias)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=config.attention_bias)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
     def _init_rope(self):
@@ -575,7 +577,7 @@ class LlamaAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -690,10 +692,10 @@ class LlamaAttention(nn.Cell):
 
         return attn_output, attn_weights, past_key_value
 
-class LlamaDecoderLayer(nn.Cell):
+class LlamaDecoderLayer(nn.Module):
 
     """
-    The `LlamaDecoderLayer` class represents a layer of the Llama decoder in the Llama model. It inherits from the `nn.Cell` class.
+    The `LlamaDecoderLayer` class represents a layer of the Llama decoder in the Llama model. It inherits from the `nn.Module` class.
     
     Attributes:
         hidden_size (int): The size of the hidden layer.
@@ -759,7 +761,7 @@ the attention weights tensor. If `use_cache` is True, the tuple also includes th
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -843,7 +845,7 @@ bias, it is initialized with zeros. If the cell is of type nn.Embedding, the wei
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -881,7 +883,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
-        self.layers = nn.CellList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
@@ -923,7 +925,7 @@ class LlamaModel(LlamaPreTrainedModel):
             """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1102,7 +1104,7 @@ model construction and preparing inputs for generation. The class inherits from 
         super().__init__(config)
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1219,7 +1221,7 @@ embeddings.
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1453,7 +1455,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = LlamaModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1498,7 +1500,7 @@ the model uses for further processing. These embeddings capture the contextual i
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

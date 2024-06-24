@@ -101,7 +101,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertModel)
 
             self.assertEqual(len(loading_info["missing_keys"]), 0)
-            # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
+            # When using MindSpore checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
             # installed), the expected value becomes `7`.
             EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
             self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)

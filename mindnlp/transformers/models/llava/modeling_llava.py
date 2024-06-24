@@ -20,7 +20,9 @@ from functools import reduce
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from ...modeling_utils import PreTrainedModel
@@ -79,13 +81,13 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[mindspore.Tensor]] = None
 
 
-class LlavaMultiModalProjector(nn.Cell):
+class LlavaMultiModalProjector(nn.Module):
 
     """
     LlavaMultiModalProjector is a class representing a multi-modal projector for processing image and text data simultaneously. 
     It facilitates the transformation of image features through linear layers with activation functions to map them to text features.
     
-    This class inherits from nn.Cell and contains methods for initialization and constructing the projection of image features to text features. 
+    This class inherits from nn.Module and contains methods for initialization and constructing the projection of image features to text features. 
     The initialization method initializes the linear layers and activation function based on the provided configuration. 
     The construct method applies the linear transformations and activation functions to the input image features to generate the final hidden states for text representation.
     
@@ -113,11 +115,11 @@ class LlavaMultiModalProjector(nn.Cell):
         """
         super().__init__()
 
-        self.linear_1 = nn.Dense(config.vision_config.hidden_size, config.text_config.hidden_size, has_bias=True)
+        self.linear_1 = nn.Dense(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Dense(config.text_config.hidden_size, config.text_config.hidden_size, has_bias=True)
+        self.linear_2 = nn.Dense(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
-    def construct(self, image_features):
+    def forward(self, image_features):
         ''' 
         This method constructs a multi-modal projector within the LlavaMultiModalProjector class.
         
@@ -512,7 +514,7 @@ Union[Tuple, LlavaCausalLMOutputWithPast]: Generates text based on the given inp
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         pixel_values: mindspore.Tensor = None,

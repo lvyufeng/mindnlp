@@ -195,7 +195,7 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
+        # create random MindSpore tensors
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)

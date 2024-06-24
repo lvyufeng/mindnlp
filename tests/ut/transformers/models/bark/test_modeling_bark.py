@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Bark model. """
+""" Testing suite for the MindSpore Bark model. """
 
 
 import copy
@@ -47,7 +47,8 @@ from ..encodec.test_modeling_encodec import EncodecModelTester
 
 if is_mindspore_available():
     import mindspore
-    from mindspore import ops, nn
+    from mindspore import ops
+    from mindnlp.core import nn
 
     from mindnlp.transformers import (
         BarkCausalModel,
@@ -743,7 +744,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.construct)
+            signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -758,7 +759,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings()[0], (nn.Embedding))
             model.set_input_embeddings(
-                nn.CellList([nn.Embedding(10, 10) for _ in range(config.n_codes_total)])
+                nn.ModuleList([nn.Embedding(10, 10) for _ in range(config.n_codes_total)])
             )
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x[0], nn.Dense))

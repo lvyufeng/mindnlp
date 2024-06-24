@@ -215,7 +215,7 @@ class Conv2d(_ConvNd):
             in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
             False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
 
-        pad_mode = 'valid'
+        pad_mode = 'pad'
         pad = padding
         if isinstance(padding, tuple):
             pad = (padding[0], padding[0], padding[1], padding[1])
@@ -339,48 +339,63 @@ class Conv3d(_ConvNd):
                         self.padding, self.dilation, self.groups)
 
 
-class _ConvTransposeMixin(object):
+class _ConvTransposeNd(_ConvNd):
+    def __init__(self, in_channels, out_channels, kernel_size, stride,
+                 padding, dilation, transposed, output_padding,
+                 groups, bias, padding_mode, dtype=None) -> None:
+        if padding_mode != 'zeros':
+            raise ValueError(f'Only "zeros" padding mode is supported for {self.__class__.__name__}')
 
-    def forward(self, input, output_size=None):
-        output_padding = self._output_padding(input, output_size)
-        func = self._backend.ConvNd(
-            self.stride, self.padding, self.dilation, self.transposed,
-            output_padding, self.groups)
-        if self.bias is None:
-            return func(input, self.weight)
-        else:
-            return func(input, self.weight, self.bias)
+        factory_kwargs = {'dtype': dtype}
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride,
+            padding, dilation, transposed, output_padding,
+            groups, bias, padding_mode, **factory_kwargs)
 
-    def _output_padding(self, input, output_size):
+    # dilation being an optional parameter is for backwards
+    # compatibility
+    def _output_padding(self, input: Tensor, output_size: Optional[List[int]],
+                        stride: List[int], padding: List[int], kernel_size: List[int],
+                        num_spatial_dims: int, dilation: Optional[List[int]] = None) -> List[int]:
         if output_size is None:
-            return self.output_padding
+            ret = _single(self.output_padding)  # converting to list if was not already
+        else:
+            has_batch_dim = input.dim() == num_spatial_dims + 2
+            num_non_spatial_dims = 2 if has_batch_dim else 1
+            if len(output_size) == num_non_spatial_dims + num_spatial_dims:
+                output_size = output_size[num_non_spatial_dims:]
+            if len(output_size) != num_spatial_dims:
+                raise ValueError(
+                    "ConvTranspose{}D: for {}D input, output_size must have {} or {} elements (got {})"
+                    .format(num_spatial_dims, input.dim(), num_spatial_dims,
+                            num_non_spatial_dims + num_spatial_dims, len(output_size)))
 
-        output_size = list(output_size)
-        k = input.dim() - 2
-        if len(output_size) == k + 2:
-            output_size = output_size[-2:]
-        if len(output_size) != k:
-            raise ValueError(
-                "output_size must have {} or {} elements (got {})"
-                .format(k, k + 2, len(output_size)))
+            min_sizes = []
+            max_sizes = []
+            for d in range(num_spatial_dims):
+                dim_size = ((input.size(d + num_non_spatial_dims) - 1) * stride[d] -
+                            2 * padding[d] +
+                            (dilation[d] if dilation is not None else 1) * (kernel_size[d] - 1) + 1)
+                min_sizes.append(dim_size)
+                max_sizes.append(min_sizes[d] + stride[d] - 1)
 
-        def dim_size(d):
-            return ((input.size(d + 2) - 1) * self.stride[d] -
-                    2 * self.padding[d] + self.kernel_size[d])
+            for i in range(len(output_size)):
+                size = output_size[i]
+                min_size = min_sizes[i]
+                max_size = max_sizes[i]
+                if size < min_size or size > max_size:
+                    raise ValueError(
+                        f"requested an output size of {output_size}, but valid sizes range "
+                        f"from {min_sizes} to {max_sizes} (for an input of {input.size()[2:]})")
 
-        min_sizes = [dim_size(d) for d in range(k)]
-        max_sizes = [min_sizes[d] + self.stride[d] - 1 for d in range(k)]
-        for size, min_size, max_size in zip(output_size, min_sizes, max_sizes):
-            if size < min_size or size > max_size:
-                raise ValueError((
-                    "requested an output size of {}, but valid sizes range "
-                    "from {} to {} (for an input of {})").format(
-                        output_size, min_sizes, max_sizes, input.size()[2:]))
+            res = []
+            for d in range(num_spatial_dims):
+                res.append(output_size[d] - min_sizes[d])
 
-        return tuple([output_size[d] - min_sizes[d] for d in range(k)])
+            ret = res
+        return ret
 
-
-class ConvTranspose1d(_ConvTransposeMixin, _ConvNd):
+class ConvTranspose1d(_ConvTransposeNd):
     """Applies a 1D transposed convolution operator over an input image
     composed of several input planes.
 
@@ -451,7 +466,19 @@ class ConvTranspose1d(_ConvTransposeMixin, _ConvNd):
             output_padding, self.groups, self.dilation)
 
 
-class ConvTranspose2d(_ConvTransposeMixin, _ConvNd):
+def _deconv_output_length(pad_mode, filter_size, stride_size, dilation_size, padding):
+    """Calculate the width and height of output."""
+    length = 0
+    filter_size = filter_size + (filter_size - 1) * (dilation_size - 1)
+    if pad_mode == 'valid':
+        if filter_size - stride_size > 0:
+            length = filter_size - stride_size
+    elif pad_mode == 'pad':
+        length = - padding + filter_size - stride_size
+
+    return length
+
+class ConvTranspose2d(_ConvTransposeNd):
     r"""Applies a 2D transposed convolution operator over an input image
     composed of several input planes.
 
@@ -538,24 +565,67 @@ class ConvTranspose2d(_ConvTransposeMixin, _ConvNd):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, output_padding=0, groups=1, bias=True, dilation=1):
+                 padding=0, output_padding=0, groups=1, bias=True, dilation=1,
+                 padding_mode='zeros', dtype=None):
+        factory_kwargs = {'dtype': dtype}
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         padding = _pair(padding)
         dilation = _pair(dilation)
         output_padding = _pair(output_padding)
-        super(ConvTranspose2d, self).__init__(
+        super().__init__(
             in_channels, out_channels, kernel_size, stride, padding, dilation,
-            True, output_padding, groups, bias)
+            True, output_padding, groups, bias, padding_mode, **factory_kwargs)
+
+        pad_mode = 'pad'
+        pad = padding
+        if isinstance(padding, tuple):
+            pad = (padding[0], padding[0], padding[1], padding[1])
+        elif isinstance(padding, int):
+            pad = (padding,) * 4
+        if not isinstance(padding, (int, tuple)):
+            pad_mode = padding
+            pad = (0,) * 4
+
+        # cause Conv2DTranspose's out_channel refers to Conv2D's out_channel.
+        self.conv2d_transpose = ops.Conv2DTranspose(out_channel=in_channels,
+                                                    kernel_size=kernel_size,
+                                                    mode=1,
+                                                    pad_mode=pad_mode,
+                                                    pad=pad,
+                                                    stride=stride,
+                                                    dilation=dilation,
+                                                    group=groups)
+        
+        self.h_add = _deconv_output_length(pad_mode, kernel_size[0], stride[0], dilation[0], pad[0] + pad[1])
+        self.w_add = _deconv_output_length(pad_mode, kernel_size[1], stride[1], dilation[1], pad[2] + pad[3])
 
     def forward(self, input, output_size=None):
-        output_padding = self._output_padding(input, output_size)
-        return F.conv_transpose2d(
-            input, self.weight, self.bias, self.stride, self.padding,
-            output_padding, self.groups, self.dilation)
+        if self.padding_mode != 'zeros':
+            raise ValueError('Only `zeros` padding mode is supported for ConvTranspose2d')
+
+        assert isinstance(self.padding, tuple)
+        # One cannot replace List by Tuple or Sequence in "_output_padding" because
+        # TorchScript does not support `Sequence[T]` or `Tuple[T, ...]`.
+        num_spatial_dims = 2
+        output_padding = self._output_padding(
+            input, output_size, self.stride, self.padding, self.kernel_size,  # type: ignore[arg-type]
+            num_spatial_dims, self.dilation)  # type: ignore[arg-type]
+
+        n, _, h, w = input.shape
+        conv2d_trans_ret = self.conv2d_transpose(input, self.weight,
+                                                 (n, self.out_channels,
+                                                  h * self.stride[0] + self.h_add,
+                                                  w * self.stride[1] + self.w_add))
+        if self.bias is not None:
+            conv2d_trans_ret = ops.bias_add(conv2d_trans_ret, self.bias)
+
+        conv2d_trans_ret = ops.pad(conv2d_trans_ret, output_padding, value=0.)
+
+        return conv2d_trans_ret
 
 
-class ConvTranspose3d(_ConvTransposeMixin, _ConvNd):
+class ConvTranspose3d(_ConvTransposeNd):
     r"""Applies a 3D transposed convolution operator over an input image composed of several input
     planes.
     The transposed convolution operator multiplies each input value element-wise by a learnable kernel,

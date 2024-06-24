@@ -1,5 +1,6 @@
+from typing import Any
 import math
-from mindspore import ops
+from ... import Tensor, ops
 from ..init import initializer, HeUniform, Uniform, _calculate_fan_in_and_fan_out
 from .module import Module
 from ..parameter import Parameter
@@ -46,7 +47,7 @@ class Linear(Module):
             self.register_parameter('bias', None)
 
     def forward(self, input):
-        return ops.dense(input, self.weight, self.bias)
+        return ops.linear(input, self.weight, self.bias)
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
@@ -55,3 +56,30 @@ class Linear(Module):
 
 class Dense(Linear):
     """"""
+
+class Identity(Module):
+    r"""A placeholder identity operator that is argument-insensitive.
+
+    Args:
+        args: any argument (unused)
+        kwargs: any keyword argument (unused)
+
+    Shape:
+        - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
+        - Output: :math:`(*)`, same shape as the input.
+
+    Examples::
+
+        >>> m = nn.Identity(54, unused_argument1=0.1, unused_argument2=False)
+        >>> input = torch.randn(128, 20)
+        >>> output = m(input)
+        >>> print(output.size())
+        torch.Size([128, 20])
+
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__()
+
+    def forward(self, input: Tensor) -> Tensor:
+        return input

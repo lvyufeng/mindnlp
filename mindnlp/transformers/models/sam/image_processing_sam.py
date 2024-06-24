@@ -718,7 +718,7 @@ input_data_format. Default is None.
                 The target size the images were padded to before being passed to the model. If None, the target size is
                 assumed to be the processor's `pad_size`.
             return_tensors (`str`, *optional*, defaults to `"ms"`):
-                If `"ms"`, return PyTorch tensors. If `"tf"`, return TensorFlow tensors.
+                If `"ms"`, return MindSpore tensors. If `"tf"`, return TensorFlow tensors.
         Returns:
             (`Union[mindspore.Tensor, tf.Tensor]`): Batched masks in batch_size, num_channels, height, width) format, where
             (height, width) is given by original_size.

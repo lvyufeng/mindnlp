@@ -19,7 +19,9 @@ from typing import Optional, Tuple, Union
 import numpy as np
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore import Tensor, Parameter
 from mindspore.common.initializer import initializer, Normal, Uniform, HeNormal
 
@@ -172,10 +174,10 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Hubert
-class HubertNoLayerNormConvLayer(nn.Cell):
+class HubertNoLayerNormConvLayer(nn.Module):
 
     """
-    HubertNoLayerNormConvLayer is a Python class representing a convolutional layer without layer normalization. This class inherits from nn.Cell.
+    HubertNoLayerNormConvLayer is a Python class representing a convolutional layer without layer normalization. This class inherits from nn.Module.
     
     This class initializes with the following parameters:
     - config: A HubertConfig object containing configuration settings.
@@ -218,12 +220,12 @@ class HubertNoLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="valid",
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states of the HubertNoLayerNormConvLayer.
         
@@ -243,10 +245,10 @@ class HubertNoLayerNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
-class HubertLayerNormConvLayer(nn.Cell):
+class HubertLayerNormConvLayer(nn.Module):
 
     """
-    The HubertLayerNormConvLayer class represents a layer with convolution, layer normalization, and activation functions for the HuBERT model. It inherits from nn.Cell.
+    The HubertLayerNormConvLayer class represents a layer with convolution, layer normalization, and activation functions for the HuBERT model. It inherits from nn.Module.
     
     This class initializes with a HubertConfig instance and a layer ID. It defines a convolutional layer with specified input and output dimensions, kernel size, stride, bias, and padding mode. It also applies
 layer normalization and an activation function to the input hidden states.
@@ -279,13 +281,13 @@ layer normalization and an activation function to the input hidden states.
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="valid",
         )
         self.layer_norm = nn.LayerNorm(self.out_conv_dim)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs a HubertLayerNormConvLayer by applying convolution, layer normalization, and activation functions to the input hidden states.
         
@@ -309,11 +311,11 @@ layer normalization and an activation function to the input hidden states.
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
-class HubertGroupNormConvLayer(nn.Cell):
+class HubertGroupNormConvLayer(nn.Module):
 
     """A class representing a Group Normalization Convolutional Layer in the Hubert model.
     
-    This class inherits from nn.Cell and is used to define a single layer of the Hubert model. 
+    This class inherits from nn.Module and is used to define a single layer of the Hubert model. 
     The layer consists of a 1-dimensional convolutional operation followed by group normalization, 
     an activation function, and returns the output hidden states.
     
@@ -354,14 +356,14 @@ class HubertGroupNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="valid",
         )
         self.activation = ACT2FN[config.feat_extract_activation]
         # NOTE: the naming is confusing, but let it be...
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Construct a HubertGroupNormConvLayer by applying a series of operations on the input hidden states.
         
@@ -382,12 +384,12 @@ class HubertGroupNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
-class HubertPositionalConvEmbedding(nn.Cell):
+class HubertPositionalConvEmbedding(nn.Module):
 
     """
     Represents a Positional Convolutional Embedding layer for the Hubert model.
     
-    This class inherits from nn.Cell and is used to apply positional convolutional embeddings to input hidden states.
+    This class inherits from nn.Module and is used to apply positional convolutional embeddings to input hidden states.
     The layer uses a convolutional neural network to process the input hidden states with configurable parameters such as kernel size, padding, activation function, and bias.
     
     Attributes:
@@ -427,13 +429,13 @@ class HubertPositionalConvEmbedding(nn.Cell):
             pad_mode='pad',
             padding=config.num_conv_pos_embeddings // 2,
             group=config.num_conv_pos_embedding_groups,
-            has_bias=True,      # TODO: confirm this
+            bias=True,      # TODO: confirm this
         )
         self.conv = weight_norm(self.conv, name='weight', dim=2)
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the HubertPositionalConvEmbedding.
         
@@ -459,12 +461,12 @@ class HubertPositionalConvEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Hubert
-class HubertSamePadLayer(nn.Cell):
+class HubertSamePadLayer(nn.Module):
 
     """
     This class represents a layer in the Hubert model that performs same padding on the input hidden states.
     
-    The HubertSamePadLayer class is a subclass of the nn.Cell class and provides functionality to remove padding from the input hidden states if necessary. It is specifically designed for the Hubert model and
+    The HubertSamePadLayer class is a subclass of the nn.Module class and provides functionality to remove padding from the input hidden states if necessary. It is specifically designed for the Hubert model and
 is used to ensure that the input hidden states have the same length as the target sequence for further processing.
     
     Attributes:
@@ -503,7 +505,7 @@ is used to ensure that the input hidden states have the same length as the targe
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states for the HubertSamePadLayer.
         
@@ -523,7 +525,7 @@ is used to ensure that the input hidden states have the same length as the targe
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->Hubert
-class HubertFeatureEncoder(nn.Cell):
+class HubertFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
     def __init__(self, config: HubertConfig):
         """
@@ -552,7 +554,7 @@ class HubertFeatureEncoder(nn.Cell):
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
-        self.conv_layers = nn.CellList(conv_layers)
+        self.conv_layers = nn.ModuleList(conv_layers)
         self._requires_grad = True
 
     def _freeze_parameters(self):
@@ -572,7 +574,7 @@ class HubertFeatureEncoder(nn.Cell):
             param.requires_grad = False
         self._requires_grad = False
 
-    def construct(self, input_values):
+    def forward(self, input_values):
         """
         Constructs the hidden states of the HubertFeatureEncoder.
         
@@ -593,12 +595,12 @@ class HubertFeatureEncoder(nn.Cell):
         return hidden_states
 
 
-class HubertFeatureProjection(nn.Cell):
+class HubertFeatureProjection(nn.Module):
 
     '''
     Represents a feature projection module for the Hubert model.
     
-    This class inherits from nn.Cell and implements methods for initializing the feature projection layer and performing feature projection on hidden states.
+    This class inherits from nn.Module and implements methods for initializing the feature projection layer and performing feature projection on hidden states.
     
     Attributes:
         feat_proj_layer_norm (bool): Indicates whether feature projection layer normalization is enabled.
@@ -634,11 +636,11 @@ class HubertFeatureProjection(nn.Cell):
         super().__init__()
         self.feat_proj_layer_norm = config.feat_proj_layer_norm
         if self.feat_proj_layer_norm:
-            self.layer_norm = nn.LayerNorm(config.conv_dim[-1], epsilon=config.layer_norm_eps)
+            self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Dense(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(p=config.feat_proj_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the feature projection for the HubertFeatureProjection class.
         
@@ -661,7 +663,7 @@ class HubertFeatureProjection(nn.Cell):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Hubert
-class HubertAttention(nn.Cell):
+class HubertAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -707,10 +709,10 @@ class HubertAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: Tensor, seq_len: int, bsz: int):
         """
@@ -730,7 +732,7 @@ class HubertAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: Tensor,
         key_value_states: Optional[Tensor] = None,
@@ -847,10 +849,10 @@ class HubertAttention(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Hubert
-class HubertFeedForward(nn.Cell):
+class HubertFeedForward(nn.Module):
 
     """
-    The HubertFeedForward class represents a feedforward neural network layer for the Hubert model. It inherits from nn.Cell and implements the feedforward computation for the hidden states.
+    The HubertFeedForward class represents a feedforward neural network layer for the Hubert model. It inherits from nn.Module and implements the feedforward computation for the hidden states.
     
     Attributes:
         config (HubertConfig): The configuration object for the Hubert model.
@@ -893,7 +895,7 @@ class HubertFeedForward(nn.Cell):
         self.output_dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(p=config.hidden_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states of the HubertFeedForward model.
         
@@ -919,12 +921,12 @@ class HubertFeedForward(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Hubert
-class HubertEncoderLayer(nn.Cell):
+class HubertEncoderLayer(nn.Module):
 
     ''' 
     HubertEncoderLayer represents a single layer of the HubertEncoder. 
     
-    This class inherits from nn.Cell and contains methods to initialize the layer and construct the layer. The __init__ method initializes the layer with the given configuration, while the construct method
+    This class inherits from nn.Module and contains methods to initialize the layer and construct the layer. The __init__ method initializes the layer with the given configuration, while the construct method
 applies the attention mechanism, dropout, layer normalization, feed forward, and final layer normalization to the input hidden states.
     
     Attributes:
@@ -966,11 +968,13 @@ applies the attention mechanism, dropout, layer normalization, feed forward, and
             is_decoder=False,
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.feed_forward = HubertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         """
         Method to construct the Hubert Encoder Layer.
         
@@ -1004,12 +1008,12 @@ applies the attention mechanism, dropout, layer normalization, feed forward, and
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2AttnAdapterLayer with Wav2Vec2->Hubert
-class HubertAttnAdapterLayer(nn.Cell):
+class HubertAttnAdapterLayer(nn.Module):
 
     """
     Implements an adapter layer for attention modules in the Hubert model, optimizing training throughput by utilizing 3D tensor weights as parameters and bypassing the use of ModuleList.
     
-    This class inherits from nn.Cell and provides functionality to construct adapter modules directly with 3D tensor weights as parameters, without using ModuleList, resulting in improved training throughput.
+    This class inherits from nn.Module and provides functionality to construct adapter modules directly with 3D tensor weights as parameters, without using ModuleList, resulting in improved training throughput.
     
     Attributes:
         input_dim (int): The dimension of the input tensor for the adapter layer.
@@ -1038,7 +1042,7 @@ class HubertAttnAdapterLayer(nn.Cell):
         self.act_fn = nn.ReLU()
         self.linear_2 = nn.Dense(self.input_dim, self.hidden_dim)
 
-    def construct(self, hidden_states: Tensor):
+    def forward(self, hidden_states: Tensor):
         """
         Method to construct the attention adapter layer in the HubertAttnAdapterLayer class.
         
@@ -1060,12 +1064,12 @@ class HubertAttnAdapterLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
-class HubertEncoderLayerStableLayerNorm(nn.Cell):
+class HubertEncoderLayerStableLayerNorm(nn.Module):
 
     """
     Represents a stable layer normalization encoder layer for the Hubert model.
     
-    This class inherits from nn.Cell and contains methods for initializing the layer and constructing the layer with attention and feed-forward operations. It also includes an optional adapter layer.
+    This class inherits from nn.Module and contains methods for initializing the layer and constructing the layer with attention and feed-forward operations. It also includes an optional adapter layer.
     
     Attributes:
         attention: HubertAttention
@@ -1121,16 +1125,18 @@ class HubertEncoderLayerStableLayerNorm(nn.Cell):
             is_decoder=False,
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.feed_forward = HubertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
         if getattr(config, "adapter_attn_dim", None) is not None:
             self.adapter_layer = HubertAttnAdapterLayer(config)
         else:
             self.adapter_layer = None
 
-    def construct(
+    def forward(
         self,
         hidden_states: Tensor,
         attention_mask: Optional[Tensor] = None,
@@ -1174,19 +1180,19 @@ class HubertEncoderLayerStableLayerNorm(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Hubert
-class HubertEncoder(nn.Cell):
+class HubertEncoder(nn.Module):
 
     """
     A class representing the encoder component of the Hubert model. This class is responsible for processing input hidden states through multiple layers of HubertEncoderLayer.
     
-    This class inherits from nn.Cell.
+    This class inherits from nn.Module.
     
     Attributes:
         config (HubertConfig): The configuration object for the Hubert model.
         pos_conv_embed (HubertPositionalConvEmbedding): Instance of HubertPositionalConvEmbedding for positional convolutional embeddings.
         layer_norm (nn.LayerNorm): Layer normalization module.
         dropout (nn.Dropout): Dropout module for regularization.
-        layers (nn.CellList): List of HubertEncoderLayer instances representing the encoder layers.
+        layers (nn.ModuleList): List of HubertEncoderLayer instances representing the encoder layers.
     
     Methods:
         construct(hidden_states, attention_mask, output_attentions, output_hidden_states, return_dict):
@@ -1224,11 +1230,12 @@ class HubertEncoder(nn.Cell):
         super().__init__()
         self.config = config
         self.pos_conv_embed = HubertPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         hidden_states: Tensor,
         attention_mask: Optional[Tensor] = None,
@@ -1307,7 +1314,7 @@ class HubertEncoder(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
-class HubertEncoderStableLayerNorm(nn.Cell):
+class HubertEncoderStableLayerNorm(nn.Module):
 
     """
     Class representing a Hubert encoder with stable layer normalization.
@@ -1321,7 +1328,7 @@ class HubertEncoderStableLayerNorm(nn.Cell):
         pos_conv_embed (HubertPositionalConvEmbedding): Positional convolutional embedding layer.
         layer_norm (nn.LayerNorm): Layer normalization for the hidden states.
         dropout (nn.Dropout): Dropout layer.
-        layers (nn.CellList): List of encoder layers for processing the hidden states.
+        layers (nn.ModuleList): List of encoder layers for processing the hidden states.
     
     Methods:
         construct(self, hidden_states, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=True):
@@ -1354,11 +1361,12 @@ class HubertEncoderStableLayerNorm(nn.Cell):
         super().__init__()
         self.config = config
         self.pos_conv_embed = HubertPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList([HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1622,7 +1630,7 @@ Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[Tuple, BaseM
 
         return hidden_states
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[Tensor],
         attention_mask: Optional[Tensor] = None,
@@ -1809,7 +1817,7 @@ None, labels: Optional[Tensor] = None) -> Union[Tuple, CausalLMOutput]: Construc
         for _, param in self.hubert.parameters_and_names():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[Tensor],
         attention_mask: Optional[Tensor] = None,
@@ -1946,7 +1954,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         for _, param in self.hubert.parameters_and_names():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[Tensor],
         attention_mask: Optional[Tensor] = None,

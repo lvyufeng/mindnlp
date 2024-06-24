@@ -22,7 +22,9 @@ from typing import Optional, Tuple, Union
 import numpy as np
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -45,7 +47,7 @@ from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmb
 logger = logging.get_logger(__name__)
 
 
-class IBertEmbeddings(nn.Cell):
+class IBertEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -101,7 +103,7 @@ class IBertEmbeddings(nn.Cell):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         if position_ids is None:
@@ -166,7 +168,7 @@ class IBertEmbeddings(nn.Cell):
         return position_ids.unsqueeze(0).broadcast_to(input_shape)
 
 
-class IBertSelfAttention(nn.Cell):
+class IBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -230,7 +232,7 @@ class IBertSelfAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         hidden_states_scaling_factor,
@@ -308,7 +310,7 @@ class IBertSelfAttention(nn.Cell):
         return outputs, output_scaling_factor
 
 
-class IBertSelfOutput(nn.Cell):
+class IBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -338,7 +340,7 @@ class IBertSelfOutput(nn.Cell):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states, hidden_states_scaling_factor, input_tensor, input_tensor_scaling_factor):
+    def forward(self, hidden_states, hidden_states_scaling_factor, input_tensor, input_tensor_scaling_factor):
         hidden_states, hidden_states_scaling_factor = self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states = self.dropout(hidden_states)
         hidden_states, hidden_states_scaling_factor = self.ln_input_act(
@@ -355,7 +357,7 @@ class IBertSelfOutput(nn.Cell):
         return hidden_states, hidden_states_scaling_factor
 
 
-class IBertAttention(nn.Cell):
+class IBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -381,7 +383,7 @@ class IBertAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         hidden_states_scaling_factor,
@@ -404,7 +406,7 @@ class IBertAttention(nn.Cell):
         return outputs, outputs_scaling_factor
 
 
-class IBertIntermediate(nn.Cell):
+class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -425,7 +427,7 @@ class IBertIntermediate(nn.Cell):
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode, force_dequant=config.force_dequant)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-    def construct(self, hidden_states, hidden_states_scaling_factor):
+    def forward(self, hidden_states, hidden_states_scaling_factor):
         hidden_states, hidden_states_scaling_factor = self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states, hidden_states_scaling_factor = self.intermediate_act_fn(
             hidden_states, hidden_states_scaling_factor
@@ -438,7 +440,7 @@ class IBertIntermediate(nn.Cell):
         return hidden_states, hidden_states_scaling_factor
 
 
-class IBertOutput(nn.Cell):
+class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -468,7 +470,7 @@ class IBertOutput(nn.Cell):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states, hidden_states_scaling_factor, input_tensor, input_tensor_scaling_factor):
+    def forward(self, hidden_states, hidden_states_scaling_factor, input_tensor, input_tensor_scaling_factor):
         hidden_states, hidden_states_scaling_factor = self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states = self.dropout(hidden_states)
         hidden_states, hidden_states_scaling_factor = self.ln_input_act(
@@ -485,7 +487,7 @@ class IBertOutput(nn.Cell):
         return hidden_states, hidden_states_scaling_factor
 
 
-class IBertLayer(nn.Cell):
+class IBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -499,7 +501,7 @@ class IBertLayer(nn.Cell):
         self.pre_intermediate_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.pre_output_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         hidden_states_scaling_factor,
@@ -543,14 +545,14 @@ class IBertLayer(nn.Cell):
         return layer_output, layer_output_scaling_factor
 
 
-class IBertEncoder(nn.Cell):
+class IBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.quant_mode = config.quant_mode
-        self.layer = nn.CellList([IBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([IBertLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         hidden_states_scaling_factor,
@@ -607,14 +609,14 @@ class IBertEncoder(nn.Cell):
         )
 
 
-class IBertPooler(nn.Cell):
+class IBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -692,7 +694,7 @@ class IBertModel(IBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -788,7 +790,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -841,19 +843,19 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         )
 
 
-class IBertLMHead(nn.Cell):
+class IBertLMHead(nn.Module):
     """I-BERT Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
         self.decoder = nn.Dense(config.hidden_size, config.vocab_size)
         self.bias = mindspore.Parameter(ops.zeros(config.vocab_size), 'bias')
         self.decoder.bias = self.bias
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -878,7 +880,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -955,7 +957,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -1033,7 +1035,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         self.post_init()
 
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1085,7 +1087,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         )
 
 
-class IBertClassificationHead(nn.Cell):
+class IBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1094,7 +1096,7 @@ class IBertClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.out_proj = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         hidden_states = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense(hidden_states)
@@ -1115,7 +1117,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

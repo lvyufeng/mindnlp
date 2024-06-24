@@ -17,7 +17,9 @@
 from typing import Optional, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from ...activations import ACT2FN
@@ -88,7 +90,7 @@ def apply_tf_padding(features: ms.Tensor, conv_layer: nn.Conv2d) -> ms.Tensor:
     return ops.pad(features, padding, "constant", 0.0)
 
 
-class MobileNetV2ConvLayer(nn.Cell):
+class MobileNetV2ConvLayer(nn.Module):
     def __init__(
         self,
         config: MobileNetV2Config,
@@ -121,7 +123,7 @@ class MobileNetV2ConvLayer(nn.Cell):
             padding=padding,
             dilation=dilation,
             group=groups,
-            has_bias=bias,
+            bias=bias,
             pad_mode="pad",
         )
 
@@ -145,7 +147,7 @@ class MobileNetV2ConvLayer(nn.Cell):
         else:
             self.activation = None
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         if self.config.tf_padding:
             features = apply_tf_padding(features, self.convolution)
         features = self.convolution(features)
@@ -156,7 +158,7 @@ class MobileNetV2ConvLayer(nn.Cell):
         return features
 
 
-class MobileNetV2InvertedResidual(nn.Cell):
+class MobileNetV2InvertedResidual(nn.Module):
     def __init__(
         self, config: MobileNetV2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
     ) -> None:
@@ -193,7 +195,7 @@ class MobileNetV2InvertedResidual(nn.Cell):
             use_activation=False,
         )
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         residual = features
 
         features = self.expand_1x1(features)
@@ -203,7 +205,7 @@ class MobileNetV2InvertedResidual(nn.Cell):
         return residual + features if self.use_residual else features
 
 
-class MobileNetV2Stem(nn.Cell):
+class MobileNetV2Stem(nn.Module):
     def __init__(self, config: MobileNetV2Config, in_channels: int, expanded_channels: int, out_channels: int) -> None:
         super().__init__()
 
@@ -241,7 +243,7 @@ class MobileNetV2Stem(nn.Cell):
             use_activation=False,
         )
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         features = self.first_conv(features)
         if self.expand_1x1 is not None:
             features = self.expand_1x1(features)
@@ -297,7 +299,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         current_stride = 2  # first conv layer has stride 2
         dilation = 1
 
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         for i in range(16):
             # Keep making the feature maps smaller or use dilated convolution?
             if current_stride == config.output_stride:
@@ -339,7 +341,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -398,7 +400,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         self.post_init()
 
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -445,7 +447,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         )
 
 
-class MobileNetV2DeepLabV3Plus(nn.Cell):
+class MobileNetV2DeepLabV3Plus(nn.Module):
     """
     The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image
     Segmentation" https://arxiv.org/abs/1802.02611
@@ -501,7 +503,7 @@ class MobileNetV2DeepLabV3Plus(nn.Cell):
             bias=True,
         )
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         spatial_size = features.shape[-2:]
 
         features_pool = self.avg_pool(features)
@@ -533,7 +535,7 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         self.post_init()
 
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         labels: Optional[ms.Tensor] = None,

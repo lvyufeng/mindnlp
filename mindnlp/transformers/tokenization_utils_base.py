@@ -130,12 +130,12 @@ class BatchEncoding(UserDict):
             space to token space the `tokenizers.Encoding` instance or list of instance (for batches) hold this
             information.
         tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in MindSpore/TensorFlow/Numpy Tensors at
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above).
         n_sequences (`Optional[int]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in MindSpore/TensorFlow/Numpy Tensors at
             initialization.
     """
     def __init__(
@@ -1848,7 +1848,7 @@ clean_up_tokenization_spaces, and added_tokens_decoder. The added_tokens_decoder
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
                 - `'tf'`: Return TensorFlow `tf.Tensor` objects.
-                - `'pt'`: Return PyTorch `mindspore.Tensor` objects.
+                - `'pt'`: Return MindSpore `mindspore.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
@@ -3022,7 +3022,7 @@ name 'raise_exception'. This allows the template to raise an error by calling th
         - stride: Integer specifying the stride when overflowing tokens.
         - is_split_into_words: A boolean flag indicating if the input text is already split into words.
         - pad_to_multiple_of: Optional integer specifying a multiple to pad the sequence length to.
-        - return_tensors: Specifies the type of tensors to return (e.g., 'pt' for PyTorch tensors).
+        - return_tensors: Specifies the type of tensors to return (e.g., 'pt' for MindSpore tensors).
         - return_token_type_ids: A boolean flag indicating whether token type IDs should be returned.
         - return_attention_mask: A boolean flag indicating whether attention masks should be returned.
         - return_overflowing_tokens: A boolean flag indicating whether overflowing tokens should be returned.
@@ -3411,9 +3411,9 @@ name 'raise_exception'. This allows the template to raise an error by calling th
 
         <Tip>
 
-        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `encoded_inputs` passed are dictionary of numpy arrays, MindSpore tensors or TensorFlow tensors, the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
+        MindSpore tensors, you will lose the specific device of your tensors however.
 
         </Tip>
 
@@ -3421,10 +3421,10 @@ name 'raise_exception'. This allows the template to raise an error by calling th
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
                 Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
                 tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
-                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                List[int]]]*) so you can use this method during preprocessing as well as in a MindSpore Dataloader
                 collate function.
 
-                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                Instead of `List[int]` you can have tensors (numpy arrays, MindSpore tensors or TensorFlow tensors), see
                 the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -3452,7 +3452,7 @@ name 'raise_exception'. This allows the template to raise an error by calling th
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `mindspore.Tensor` objects.
+                - `'pt'`: Return MindSpore `mindspore.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
@@ -3467,7 +3467,7 @@ name 'raise_exception'. This allows the template to raise an error by calling th
                 self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
 
         # If we have a list of dicts, let's convert it in a dict of lists
-        # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
+        # We do this to allow using this method as a collate_fn function in MindSpore Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
@@ -3485,9 +3485,9 @@ name 'raise_exception'. This allows the template to raise an error by calling th
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have MindSpore/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
-        # Note that we lose the specific device the tensor may be on for PyTorch
+        # Note that we lose the specific device the tensor may be on for MindSpore
 
         first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):
@@ -4203,7 +4203,7 @@ name 'raise_exception'. This allows the template to raise an error by calling th
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `mindspore.Tensor` objects.
+                - `'pt'`: Return MindSpore `mindspore.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `True`):
                 Activates and controls truncation. Accepts the following values:

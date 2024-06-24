@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================
-"""PyTorch MobileNetV1 model."""
+"""MindSpore MobileNetV1 model."""
 
 from typing import Optional, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 
 from mindspore.common.initializer import initializer, Normal
 
@@ -59,7 +61,7 @@ def apply_tf_padding(features: ms.Tensor, conv_layer: nn.Conv2d) -> ms.Tensor:
     return ops.pad(features, padding, "constant", 0.0)
 
 
-class MobileNetV1ConvLayer(nn.Cell):
+class MobileNetV1ConvLayer(nn.Module):
     def __init__(
         self,
         config: MobileNetV1Config,
@@ -89,7 +91,7 @@ class MobileNetV1ConvLayer(nn.Cell):
             stride=stride,
             padding=padding,
             group=groups,
-            has_bias=bias,
+            bias=bias,
             pad_mode="pad",
         )
 
@@ -114,7 +116,7 @@ class MobileNetV1ConvLayer(nn.Cell):
         else:
             self.activation = None
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         if self.config.tf_padding:
             features = apply_tf_padding(features, self.convolution)
 
@@ -170,7 +172,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
 
         strides = [1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1]
 
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         for i in range(13):
             in_channels = out_channels
 
@@ -206,7 +208,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -266,7 +268,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         self.post_init()
 
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,

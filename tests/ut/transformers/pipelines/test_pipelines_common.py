@@ -227,7 +227,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
             self.check_default_pipeline(task, "ms", set_seed_fn, self.check_models_equal_pt)
 
-            # clean-up as much as possible GPU memory occupied by PyTorch
+            # clean-up as much as possible GPU memory occupied by MindSpore
             gc.collect()
 
 
@@ -239,7 +239,7 @@ class PipelineUtilsTest(unittest.TestCase):
     #     set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
     #     self.check_default_pipeline("table-question-answering", "pt", set_seed_fn, self.check_models_equal_pt)
 
-    #     # clean-up as much as possible GPU memory occupied by PyTorch
+    #     # clean-up as much as possible GPU memory occupied by MindSpore
     #     gc.collect()
     #     backend_empty_cache(torch_device)
 

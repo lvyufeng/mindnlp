@@ -25,7 +25,9 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 import mindspore
-from mindspore import nn, ops, Tensor, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -53,7 +55,7 @@ def load_balancing_loss_func(
     gate_logits: mindspore.Tensor, num_experts: mindspore.Tensor = None, top_k=2, attention_mask: Optional[mindspore.Tensor] = None
 ) -> float:
     r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in MindSpore.
 
     See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
@@ -151,10 +153,10 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2Moe
-class Qwen2MoeRMSNorm(nn.Cell):
+class Qwen2MoeRMSNorm(nn.Module):
 
     """
-    Qwen2MoeRMSNorm is a custom normalization layer that is equivalent to T5LayerNorm. It inherits from the nn.Cell class.
+    Qwen2MoeRMSNorm is a custom normalization layer that is equivalent to T5LayerNorm. It inherits from the nn.Module class.
     
     This normalization layer performs root mean square normalization (RMSNorm) on the input hidden states. It is commonly used in neural network architectures, such as T5 models, to improve the training
 efficiency and convergence.
@@ -194,7 +196,7 @@ efficiency and convergence.
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the Qwen2MoeRMSNorm for the given hidden states.
         
@@ -228,10 +230,10 @@ efficiency and convergence.
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Qwen2Moe
-class Qwen2MoeRotaryEmbedding(nn.Cell):
+class Qwen2MoeRotaryEmbedding(nn.Module):
 
     """
-    This class represents a Qwen2MoeRotaryEmbedding, which is a rotary positional embedding used in natural language processing tasks. It is a subclass of the nn.Cell class.
+    This class represents a Qwen2MoeRotaryEmbedding, which is a rotary positional embedding used in natural language processing tasks. It is a subclass of the nn.Module class.
     
     The Qwen2MoeRotaryEmbedding class initializes with the following parameters:
     - dim (int): The dimension of the embedding.
@@ -249,7 +251,7 @@ class Qwen2MoeRotaryEmbedding(nn.Cell):
     construct(self, x, seq_len=None):
         Constructs the rotary embedding for the given input tensor and sequence length.
     
-    Note: The methods above are inherited from the nn.Cell class.
+    Note: The methods above are inherited from the nn.Module class.
     
     Example usage:
         # Create a Qwen2MoeRotaryEmbedding instance
@@ -315,7 +317,7 @@ class Qwen2MoeRotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs a rotary embedding for the given input sequence.
         
@@ -384,12 +386,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 # Modified from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2Moe
-class Qwen2MoeMLP(nn.Cell):
+class Qwen2MoeMLP(nn.Module):
 
     """
     Qwen2MoeMLP represents a multi-layer perceptron (MLP) model with customized projection layers for gating and feature transformation. 
     
-    The Qwen2MoeMLP class inherits from nn.Cell and is initialized with a configuration and an optional intermediate size. The class provides methods to construct and manipulate the MLP model.
+    The Qwen2MoeMLP class inherits from nn.Module and is initialized with a configuration and an optional intermediate size. The class provides methods to construct and manipulate the MLP model.
     
     Attributes:
         config: The configuration object used for initializing the MLP.
@@ -425,12 +427,12 @@ class Qwen2MoeMLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a modified multi-layer perceptron in the Qwen2MoeMLP class.
         
@@ -467,7 +469,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
 
 
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2Attention with Qwen2->Qwen2Moe
-class Qwen2MoeAttention(nn.Cell):
+class Qwen2MoeAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -514,10 +516,10 @@ class Qwen2MoeAttention(nn.Cell):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=True)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = Qwen2MoeRotaryEmbedding(
             self.head_dim,
@@ -525,7 +527,7 @@ class Qwen2MoeAttention(nn.Cell):
             base=self.rope_theta,
         )
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -634,17 +636,17 @@ QWEN2MOE_ATTENTION_CLASSES = {
 }
 
 
-class Qwen2MoeSparseMoeBlock(nn.Cell):
+class Qwen2MoeSparseMoeBlock(nn.Module):
 
     """
-    This class represents a sparse mixture-of-experts (MoE) block for the Qwen2 model. It is a subclass of nn.Cell.
+    This class represents a sparse mixture-of-experts (MoE) block for the Qwen2 model. It is a subclass of nn.Module.
     
     Attributes:
         num_experts (int): The number of experts in the MoE block.
         top_k (int): The number of top experts to select per token.
         norm_topk_prob (bool): Flag indicating whether to normalize the probabilities of the top experts.
         gate (nn.Dense): The gate layer that computes the routing probabilities for the experts.
-        experts (nn.CellList): List of expert layers in the MoE block.
+        experts (nn.ModuleList): List of expert layers in the MoE block.
         shared_expert (Qwen2MoeMLP): The shared expert layer in the MoE block.
         shared_expert_gate (nn.Dense): The gate layer for the shared expert.
     
@@ -678,15 +680,15 @@ class Qwen2MoeSparseMoeBlock(nn.Cell):
         self.norm_topk_prob = config.norm_topk_prob
 
         # gating
-        self.gate = nn.Dense(config.hidden_size, config.num_experts, has_bias=False)
-        self.experts = nn.CellList(
+        self.gate = nn.Dense(config.hidden_size, config.num_experts, bias=False)
+        self.experts = nn.ModuleList(
             [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
         )
 
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
-        self.shared_expert_gate = nn.Dense(config.hidden_size, 1, has_bias=False)
+        self.shared_expert_gate = nn.Dense(config.hidden_size, 1, bias=False)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a Qwen2MoeSparseMoeBlock by processing the input hidden_states.
         
@@ -749,13 +751,13 @@ class Qwen2MoeSparseMoeBlock(nn.Cell):
         return final_hidden_states, router_logits
 
 
-class Qwen2MoeDecoderLayer(nn.Cell):
+class Qwen2MoeDecoderLayer(nn.Module):
 
     """
     The `Qwen2MoeDecoderLayer` class represents a single layer of the Qwen2Moe decoder model. It is designed to be used in the Qwen2MoeDecoder model to process the input hidden states and generate output
 representations.
     
-    This class inherits from the `nn.Cell` class.
+    This class inherits from the `nn.Module` class.
     
     Attributes:
         - hidden_size (int): The size of the hidden state.
@@ -828,7 +830,7 @@ representations.
         self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -924,7 +926,7 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -960,7 +962,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [Qwen2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1004,7 +1006,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1218,7 +1220,7 @@ with the given inputs and returns the output logits. Optionally computes the mas
         super().__init__(config)
         self.model = Qwen2MoeModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_experts
@@ -1328,7 +1330,7 @@ with the given inputs and returns the output logits. Optionally computes the mas
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1582,7 +1584,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen2MoeModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1622,7 +1624,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

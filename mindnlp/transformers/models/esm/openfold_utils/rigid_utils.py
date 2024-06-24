@@ -865,7 +865,7 @@ class Rigid:
 
     def __getitem__(self, index: Any) -> Rigid:
         """
-        Indexes the affine transformation with PyTorch-style indices. The index is applied to the shared dimensions of
+        Indexes the affine transformation with MindSpore-style indices. The index is applied to the shared dimensions of
         both the rotation and the translation.
 
         E.g.::

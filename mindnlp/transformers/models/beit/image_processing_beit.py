@@ -575,7 +575,7 @@ class BeitImageProcessor(BaseImageProcessor):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports MindSpore.
 
         Args:
             outputs ([`BeitForSemanticSegmentation`]):

@@ -44,12 +44,12 @@ def prepare_image_inputs(
     torchify=False,
 ):
     """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-    or a list of PyTorch tensors if one specifies torchify=True.
+    or a list of MindSpore tensors if one specifies torchify=True.
 
     One can specify whether the images are of the same resolution or not.
     """
 
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+    assert not (numpify and torchify), "You cannot specify both numpy and MindSpore tensors at the same time"
 
     image_inputs = []
     for i in range(batch_size):
@@ -74,7 +74,7 @@ def prepare_image_inputs(
 
 
 def prepare_video(num_frames, num_channels, width=10, height=10, numpify=False, torchify=False):
-    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
+    """This function prepares a video as a list of PIL images/NumPy arrays/MindSpore tensors."""
 
     video = []
     for i in range(num_frames):
@@ -101,12 +101,12 @@ def prepare_video_inputs(
     torchify=False,
 ):
     """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
-    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
+    one specifies numpify=True, or a list of list of MindSpore tensors if one specifies torchify=True.
 
     One can specify whether the videos are of the same resolution or not.
     """
 
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+    assert not (numpify and torchify), "You cannot specify both numpy and MindSpore tensors at the same time"
 
     video_inputs = []
     for i in range(batch_size):
@@ -167,7 +167,7 @@ class ImageProcessingTestMixin:
             # Initialize image_processor
             image_processor = self.image_processing_class(**self.image_processor_dict)
 
-            # create random PyTorch tensors
+            # create random MindSpore tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             encoding = image_processor(image_inputs, return_tensors="ms")
@@ -228,7 +228,7 @@ class ImageProcessingTestMixin:
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
+        # create random MindSpore tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         for image in image_inputs:

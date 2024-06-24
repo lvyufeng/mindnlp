@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Bros model."""
+""" MindSpore Bros model."""
 
 
 import math
@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from mindnlp.modules.functional import finfo
@@ -76,12 +78,12 @@ class BrosSpadeOutput(ModelOutput):
     attentions: Optional[Tuple[mindspore.Tensor]] = None
 
 
-class BrosPositionalEmbedding1D(nn.Cell):
+class BrosPositionalEmbedding1D(nn.Module):
 
     """
     Represents a 1D positional embedding for Bros.
     
-    This class inherits from nn.Cell and is used to create a 1D positional embedding for Bros.
+    This class inherits from nn.Module and is used to create a 1D positional embedding for Bros.
     
     The positional embedding is constructed based on the input configuration and positional sequence. The constructor initializes the dimensional parameters for the positional embedding, and the construct
 method generates the positional embedding based on the given positional sequence.
@@ -128,7 +130,7 @@ method generates the positional embedding based on the given positional sequence
         )
         self.inv_freq = inv_freq
 
-    def construct(self, pos_seq: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pos_seq: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a positional embedding for 1D bounding box position sequences.
         
@@ -149,11 +151,11 @@ method generates the positional embedding based on the given positional sequence
         return pos_emb
 
 
-class BrosPositionalEmbedding2D(nn.Cell):
+class BrosPositionalEmbedding2D(nn.Module):
 
     """
     BrosPositionalEmbedding2D represents a 2D positional embedding operation for bounding boxes. 
-    This class inherits from nn.Cell and is used to create positional embeddings for 2D spatial information.
+    This class inherits from nn.Module and is used to create positional embeddings for 2D spatial information.
     
     Parameters:
     - config (dict): A dictionary containing configuration parameters for the positional embedding.
@@ -195,7 +197,7 @@ class BrosPositionalEmbedding2D(nn.Cell):
         self.x_pos_emb = BrosPositionalEmbedding1D(config)
         self.y_pos_emb = BrosPositionalEmbedding1D(config)
 
-    def construct(self, bbox: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, bbox: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a positional embedding for a 2D bounding box.
         
@@ -225,10 +227,10 @@ class BrosPositionalEmbedding2D(nn.Cell):
         return bbox_pos_emb
 
 
-class BrosBboxEmbeddings(nn.Cell):
+class BrosBboxEmbeddings(nn.Module):
 
     """
-    The BrosBboxEmbeddings class represents a neural network cell for generating positional embeddings for bounding boxes. It inherits from the nn.Cell class.
+    The BrosBboxEmbeddings class represents a neural network cell for generating positional embeddings for bounding boxes. It inherits from the nn.Module class.
     
     This class initializes with a configuration object and sets up the necessary components for generating positional embeddings for bounding boxes. It includes a positional embedding layer and a projection
 layer for processing the positional embeddings.
@@ -256,9 +258,9 @@ applies the positional embedding and projection layers to obtain the positional 
         """
         super(BrosBboxEmbeddings, self).__init__()
         self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
-        self.bbox_projection = nn.Dense(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, has_bias=False)
+        self.bbox_projection = nn.Dense(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
 
-    def construct(self, bbox: mindspore.Tensor):
+    def forward(self, bbox: mindspore.Tensor):
         """
         Constructs the bounding box embeddings for the BrosBboxEmbeddings class.
         
@@ -283,7 +285,7 @@ applies the positional embedding and projection layers to obtain the positional 
         return bbox_pos_emb
 
 
-class BrosTextEmbeddings(nn.Cell):
+class BrosTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
     def __init__(self, config):
         """
@@ -312,14 +314,15 @@ class BrosTextEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.position_ids = ops.arange(config.max_position_embeddings).reshape(1, -1)
         self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=mindspore.int64)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -377,12 +380,12 @@ class BrosTextEmbeddings(nn.Cell):
         return embeddings
 
 
-class BrosSelfAttention(nn.Cell):
+class BrosSelfAttention(nn.Module):
 
     """
     This class represents a self-attention mechanism for the Bros model. It is used to calculate attention scores and generate context layers based on input hidden states.
     
-    The BrosSelfAttention class inherits from the nn.Cell class and implements the following methods:
+    The BrosSelfAttention class inherits from the nn.Module class and implements the following methods:
     
     - __init__(self, config): Initializes the BrosSelfAttention instance with the given configuration. It checks if the hidden size is a multiple of the number of attention heads and sets up the required
 layers and embeddings.
@@ -478,7 +481,7 @@ self.attention_head_size).
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         bbox_pos_emb: mindspore.Tensor,
@@ -605,10 +608,10 @@ self.attention_head_size).
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Bros
-class BrosSelfOutput(nn.Cell):
+class BrosSelfOutput(nn.Module):
 
     """
-    This class represents a self-output layer for a neural network, providing methods for processing and transforming input tensors. It inherits from the nn.Cell class.
+    This class represents a self-output layer for a neural network, providing methods for processing and transforming input tensors. It inherits from the nn.Module class.
     
     The BrosSelfOutput class initializes with the given configuration and contains methods for constructing the self-output layer. The construct method takes hidden_states and input_tensor as input tensors and
 processes them using dense, dropout, and LayerNorm operations to produce the final hidden_states output tensor.
@@ -642,10 +645,11 @@ framework documentation.
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the self-attention output for the BrosSelfOutput class.
         
@@ -666,13 +670,13 @@ framework documentation.
         return hidden_states
 
 
-class BrosAttention(nn.Cell):
+class BrosAttention(nn.Module):
 
     """
     This class represents the BrosAttention module, which is a part of the Bros model architecture. 
     BrosAttention is responsible for performing self-attention and output computation.
     
-    The BrosAttention class inherits from the nn.Cell class.
+    The BrosAttention class inherits from the nn.Module class.
     
     Attributes:
         self (BrosSelfAttention): The self-attention layer responsible for computing self-attention scores.
@@ -767,7 +771,7 @@ class BrosAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         bbox_pos_emb: mindspore.Tensor,
@@ -814,11 +818,11 @@ class BrosAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Bros
-class BrosIntermediate(nn.Cell):
+class BrosIntermediate(nn.Module):
 
     """
     This class represents an intermediate layer of a neural network model called BrosIntermediate. 
-    It inherits from the nn.Cell class.
+    It inherits from the nn.Module class.
       
     Attributes:
         - dense (nn.Dense): A fully connected layer that maps the input tensor to the hidden size specified in the configuration.
@@ -856,7 +860,7 @@ class BrosIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Method to construct hidden states in the BrosIntermediate class.
         
@@ -877,12 +881,12 @@ class BrosIntermediate(nn.Cell):
         return hidden_states
 
 
-class BrosOutput(nn.Cell):
+class BrosOutput(nn.Module):
 
     """
     This class represents an output layer for the Bros Model. It is used to apply a series of transformations to the input tensor and produce the final output.
     
-    The BrosOutput class inherits from the nn.Cell class, which is a base class for neural network modules in MindSpore.
+    The BrosOutput class inherits from the nn.Module class, which is a base class for neural network modules in MindSpore.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that applies a linear transformation to the input tensor.
@@ -937,10 +941,11 @@ class BrosOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output tensor by applying a series of transformations to the hidden states and input tensor.
         
@@ -964,7 +969,7 @@ class BrosOutput(nn.Cell):
         return hidden_states
 
 
-class BrosLayer(nn.Cell):
+class BrosLayer(nn.Module):
 
     """
     This class represents a custom layer implementation, BrosLayer, for a neural network model. 
@@ -1018,7 +1023,7 @@ Tuple[mindspore.Tensor]:
         self.intermediate = BrosIntermediate(config)
         self.output = BrosOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         bbox_pos_emb: mindspore.Tensor,
@@ -1126,15 +1131,15 @@ Tuple[mindspore.Tensor]:
         return layer_output
 
 
-class BrosEncoder(nn.Cell):
+class BrosEncoder(nn.Module):
 
     """
     The BrosEncoder class represents a custom encoder module for processing input data in a neural network. 
-    It inherits from nn.Cell and contains methods for initializing the encoder and performing the encoding process.
+    It inherits from nn.Module and contains methods for initializing the encoder and performing the encoding process.
     
     Attributes:
         config (object): Configuration object containing settings for the encoder.
-        layer (nn.CellList): List of BrosLayer instances representing the encoder layers.
+        layer (nn.ModuleList): List of BrosLayer instances representing the encoder layers.
     
     Methods:
         __init__(config): Initializes the BrosEncoder with the provided configuration.
@@ -1168,9 +1173,9 @@ class BrosEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         bbox_pos_emb: mindspore.Tensor,
@@ -1290,12 +1295,12 @@ num_attention_heads, sequence_length, encoder_sequence_length).
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Bros
-class BrosPooler(nn.Cell):
+class BrosPooler(nn.Module):
 
     """
     Represents a custom pooling layer named BrosPooler that performs pooling on the input tensor.
     
-    This class inherits from nn.Cell and includes methods for initialization and constructing the pooling layer.
+    This class inherits from nn.Module and includes methods for initialization and constructing the pooling layer.
     
     Attributes:
         dense (nn.Dense): A fully connected layer for the pooling operation.
@@ -1329,7 +1334,7 @@ class BrosPooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a pooled output tensor based on the given hidden states.
         
@@ -1351,11 +1356,11 @@ class BrosPooler(nn.Cell):
         return pooled_output
 
 
-class BrosRelationExtractor(nn.Cell):
+class BrosRelationExtractor(nn.Module):
 
     """ 
     The BrosRelationExtractor class represents a relation extractor module for processing structured data. 
-    This class inherits from nn.Cell and implements methods for constructing relation scores based on query and key layers.
+    This class inherits from nn.Module and implements methods for constructing relation scores based on query and key layers.
     
     Attributes:
         n_relations (int): Number of relations to consider.
@@ -1410,7 +1415,7 @@ class BrosRelationExtractor(nn.Cell):
 
         self.dummy_node = Parameter(ops.zeros(1, self.backbone_hidden_size))
 
-    def construct(self, query_layer: mindspore.Tensor, key_layer: mindspore.Tensor):
+    def forward(self, query_layer: mindspore.Tensor, key_layer: mindspore.Tensor):
         """
         Method to construct a relation score matrix based on query and key layers.
         
@@ -1571,7 +1576,7 @@ output_hidden_states, return_dict): Constructs the model with the given input an
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1763,7 +1768,7 @@ entity recognition or part-of-speech tagging.
 
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1913,7 +1918,7 @@ logits. Optionally, it can also return hidden states and attentions if specified
 
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -2092,7 +2097,7 @@ extraction. The method init_weights() is called to initialize the weights of the
 
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,

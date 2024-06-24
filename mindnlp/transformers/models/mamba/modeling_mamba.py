@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, Uniform, HeUniform
 
 from mindnlp.utils import (
@@ -41,7 +43,7 @@ _CONFIG_FOR_DOC = "MambaConfig"
 MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = []  # See all Mamba models at https://hf-mirror.com/models?filter=mamba
 
 
-class MambaMixer(nn.Cell):
+class MambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
@@ -82,7 +84,7 @@ class MambaMixer(nn.Cell):
         self.conv1d = nn.Conv1d(
             in_channels=self.intermediate_size,
             out_channels=self.intermediate_size,
-            has_bias=config.use_conv_bias,
+            bias=config.use_conv_bias,
             kernel_size=config.conv_kernel,
             group=self.intermediate_size,
             padding=config.conv_kernel - 1,
@@ -93,11 +95,11 @@ class MambaMixer(nn.Cell):
         self.act = ACT2FN[config.hidden_act]
 
         # projection of the input hidden states
-        self.in_proj = nn.Dense(self.hidden_size, self.intermediate_size * 2, has_bias=config.use_bias)
+        self.in_proj = nn.Dense(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
-        self.x_proj = nn.Dense(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, has_bias=False)
+        self.x_proj = nn.Dense(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
-        self.dt_proj = nn.Dense(self.time_step_rank, self.intermediate_size, has_bias=True)
+        self.dt_proj = nn.Dense(self.time_step_rank, self.intermediate_size, bias=True)
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -106,11 +108,11 @@ class MambaMixer(nn.Cell):
 
         self.A_log = Parameter(ops.log(A))
         self.D = Parameter(ops.ones(self.intermediate_size))
-        self.out_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=config.use_bias)
+        self.out_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
     # fmt: off
-    def construct(self, input_states, cache_params=None):
+    def forward(self, input_states, cache_params=None):
 
         """
         Constructs contextualized states based on input states and cache parameters.
@@ -245,10 +247,10 @@ class MambaCache:
         }
 
 
-class MambaRMSNorm(nn.Cell):
+class MambaRMSNorm(nn.Module):
 
     """
-    MambaRMSNorm is a neural network cell that represents a modified version of the RMS normalization layer. It inherits from the nn.Cell class and provides functionality for normalizing hidden states in a
+    MambaRMSNorm is a neural network cell that represents a modified version of the RMS normalization layer. It inherits from the nn.Module class and provides functionality for normalizing hidden states in a
 neural network.
     
     This class initializes the MambaRMSNorm layer with the specified hidden size and epsilon value for variance. The hidden_size parameter determines the size of the input hidden states, while the eps
@@ -268,7 +270,7 @@ original input data type before being returned.
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
 
         """
         This method constructs the MambaRMSNorm operation by normalizing the hidden states.
@@ -292,11 +294,11 @@ original input data type before being returned.
         return self.weight * hidden_states.to(input_dtype)
 
 
-class MambaBlock(nn.Cell):
+class MambaBlock(nn.Module):
 
     """
     The MambaBlock class represents a block used in the Mamba neural network model for processing hidden states. 
-    This class inherits from nn.Cell and contains methods for initializing the block and constructing the block's operations. 
+    This class inherits from nn.Module and contains methods for initializing the block and constructing the block's operations. 
     
     Attributes:
         config: A dictionary containing configuration parameters for the block.
@@ -338,7 +340,7 @@ class MambaBlock(nn.Cell):
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = MambaMixer(config, layer_idx=layer_idx)
 
-    def construct(self, hidden_states, cache_params=None):
+    def forward(self, hidden_states, cache_params=None):
 
         """
         This method constructs a MambaBlock by performing a series of operations on the input hidden_states.
@@ -415,7 +417,7 @@ class MambaPreTrainedModel(PreTrainedModel):
             for name, p in cell.parameters_and_names():
                 if name in ["out_proj.weight"]:
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                    # Following MindSpore init, except scale by 1/sqrt(2 * n_layer)
                     # We need to reinit p since this code could be called multiple times
                     # Having just p *= scale would repeatedly scale it down
                     p.set_data(initializer(HeUniform(math.sqrt(5)), p.shape, p.dtype) / math.sqrt(self.config.num_layers))
@@ -479,7 +481,7 @@ class MambaModel(MambaPreTrainedModel):
     
     Attributes:
         embeddings (nn.Embedding): An instance of the nn.Embedding class representing the input embeddings.
-        layers (nn.CellList): A list of MambaBlock instances representing the layers of the model.
+        layers (nn.ModuleList): A list of MambaBlock instances representing the layers of the model.
         gradient_checkpointing (bool): A flag indicating whether gradient checkpointing is used during training.
         norm_f (MambaRMSNorm): An instance of the MambaRMSNorm class representing the normalization function.
         
@@ -511,7 +513,7 @@ class MambaModel(MambaPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.CellList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
         self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
@@ -551,7 +553,7 @@ class MambaModel(MambaPreTrainedModel):
         """
         self.embeddings = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         inputs_embeds: Optional[mindspore.Tensor] = None,
@@ -661,7 +663,7 @@ loss if labels are provided and returns the loss along with the logits and other
         """
         super().__init__(config)
         self.backbone = MambaModel(config)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -790,7 +792,7 @@ corresponding value in model_kwargs to None. The method then returns the updated
         model_inputs["cache_params"] = cache_params
         return model_inputs
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         inputs_embeds: Optional[mindspore.Tensor] = None,

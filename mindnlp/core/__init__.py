@@ -14,8 +14,9 @@
 # ============================================================================
 """core module"""
 
+from . import _operations
 from .tensor import Tensor, tensor
 from . import serialization
-from .patch import CorePatch
+from . import ops
 
 __all__ = ['Tensor', 'CorePatch', 'tensor']

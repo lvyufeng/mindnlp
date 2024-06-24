@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Data2VecAudio model."""
+"""Testing suite for the MindSpore Data2VecAudio model."""
 
 import unittest
 
@@ -529,7 +529,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
+        # This regression test was failing with MindSpore < 1.3
         (
             config,
             input_ids,

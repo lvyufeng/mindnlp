@@ -25,7 +25,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from ....modules.functional import finfo
@@ -72,7 +74,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class OlmoLayerNorm(nn.Cell):
+class OlmoLayerNorm(nn.Module):
     """LayerNorm but with no learnable weight or bias."""
     def __init__(self, hidden_size: int) -> None:
         """
@@ -95,7 +97,7 @@ class OlmoLayerNorm(nn.Cell):
                                       begin_params_axis=-1,
                                       epsilon=1e-5)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the OlmoLayerNorm for the given hidden states.
         
@@ -130,12 +132,12 @@ ALL_LAYERNORM_LAYERS.append(OlmoLayerNorm)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
-class OlmoRotaryEmbedding(nn.Cell):
+class OlmoRotaryEmbedding(nn.Module):
 
     """
     This class represents an implementation of Olmo Rotary Embedding for neural networks. 
     It provides methods to calculate and cache cosine and sine values based on positional embeddings for efficient computation in attention mechanisms. 
-    The class inherits from nn.Cell and includes initialization parameters for dimensionality, maximum position embeddings, base value, and scaling factor.
+    The class inherits from nn.Module and includes initialization parameters for dimensionality, maximum position embeddings, base value, and scaling factor.
     The class also includes methods to calculate cosine and sine values based on positional embeddings, and provides warnings for deprecated attributes.
     Note: The 'sin_cached' and 'cos_cached' attributes will be removed in version 4.39 and their contents changed in version 4.38. 
     It is recommended to use the 'forward' method of RoPE instead of accessing these attributes directly.
@@ -214,7 +216,7 @@ class OlmoRotaryEmbedding(nn.Cell):
         )
         return self._cos_cached
 
-    def construct(self, x, position_ids):
+    def forward(self, x, position_ids):
         """
         Constructs the OlmoRotaryEmbedding.
         
@@ -248,7 +250,7 @@ class OlmoRotaryEmbedding(nn.Cell):
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
 class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-    def construct(self, x, position_ids):
+    def forward(self, x, position_ids):
         """
         Constructs the cosine and sine embeddings for the given input tensor 'x' with positional encoding.
         
@@ -274,7 +276,7 @@ class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
 class OlmoDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
     """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-    def construct(self, x, position_ids):
+    def forward(self, x, position_ids):
         """Constructs the OlmoDynamicNTKScalingRotaryEmbedding.
         
         This method initializes the OlmoDynamicNTKScalingRotaryEmbedding object by constructing the positional encodings for the input tensor.
@@ -341,10 +343,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class OlmoMLP(nn.Cell):
+class OlmoMLP(nn.Module):
 
     """
-    The 'OlmoMLP' class represents a multi-layer perceptron (MLP) with customized operations for gating, projection, and activation functions. This class inherits from the 'nn.Cell' class.
+    The 'OlmoMLP' class represents a multi-layer perceptron (MLP) with customized operations for gating, projection, and activation functions. This class inherits from the 'nn.Module' class.
     
     Attributes:
     - config (object): The configuration object that stores the parameters for the MLP.
@@ -393,12 +395,12 @@ class OlmoMLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a multi-layer perceptron using the specified input data.
         
@@ -430,7 +432,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class OlmoAttention(nn.Cell):
+class OlmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
     def __init__(self, config: OlmoConfig, layer_idx: Optional[int] = None):
@@ -476,10 +478,10 @@ class OlmoAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.attention_bias)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias)
-        self.o_proj = nn.Dense(self.hidden_size, self.hidden_size, has_bias=config.attention_bias)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Dense(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Olmo
@@ -546,7 +548,7 @@ the 'scaling_factor' parameter determines the scaling factor to be applied. The 
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -638,10 +640,10 @@ OLMO_ATTENTION_CLASSES = {
 }
 
 
-class OlmoDecoderLayer(nn.Cell):
+class OlmoDecoderLayer(nn.Module):
 
     """
-    This class represents a decoder layer in the Olmo model. It inherits from the nn.Cell class.
+    This class represents a decoder layer in the Olmo model. It inherits from the nn.Module class.
     
     Attributes:
         hidden_size (int): The size of the hidden state.
@@ -703,7 +705,7 @@ class OlmoDecoderLayer(nn.Cell):
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
 
     # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -901,7 +903,7 @@ class OlmoModel(OlmoPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = OlmoLayerNorm(config.hidden_size)
@@ -942,7 +944,7 @@ class OlmoModel(OlmoPreTrainedModel):
         self.embed_tokens = value
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel.forward
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1206,7 +1208,7 @@ and returns the output.
         super().__init__(config)
         self.model = OlmoModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1306,7 +1308,7 @@ the expected shape of the output layer.
         return self.model
 
     # Ignore copy
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

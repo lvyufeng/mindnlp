@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 
 from ...modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, ModelOutput
 from ..xlm_roberta import (
@@ -243,7 +245,7 @@ dictionaries. The resulting list is returned as the output of this method.
         return vecs
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.forward
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

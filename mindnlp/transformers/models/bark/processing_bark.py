@@ -298,7 +298,7 @@ class BarkProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:

@@ -2312,5 +2312,5 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         del state_dict
         gc.collect()
 
-    # Return the same thing as PyTorch load_state_dict function.
+    # Return the same thing as MindSpore load_state_dict function.
     return missing_keys, unexpected_keys

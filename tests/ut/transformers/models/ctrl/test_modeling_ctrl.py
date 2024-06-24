@@ -257,7 +257,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
+        # clean-up as much as possible GPU memory occupied by MindSpore
         gc.collect()
 
     def test_config(self):
@@ -282,7 +282,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
+        # clean-up as much as possible GPU memory occupied by MindSpore
         gc.collect()
 
     @slow

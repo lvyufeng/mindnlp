@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch WavLM model."""
+"""Testing suite for the MindSpore WavLM model."""
 
 import math
 import unittest
@@ -395,7 +395,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # WavLM uses PyTorch's multi-head-attention class
+    # WavLM uses MindSpore's multi-head-attention class
     # and thus can't retain gradients on attentions
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

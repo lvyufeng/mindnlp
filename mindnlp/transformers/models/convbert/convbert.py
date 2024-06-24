@@ -17,8 +17,10 @@
 from typing import Optional, Tuple, Union
 import math
 import mindspore as ms
-from mindspore import nn
 from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from ...activations import ACT2FN, get_activation
@@ -45,7 +47,7 @@ CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ConvBertEmbeddings(nn.Cell):
+class ConvBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
     def __init__(self, config):
         """
@@ -82,7 +84,7 @@ class ConvBertEmbeddings(nn.Cell):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(
-            config.embedding_size, epsilon=config.layer_norm_eps
+            config.embedding_size, eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -92,7 +94,7 @@ class ConvBertEmbeddings(nn.Cell):
 
         self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=ms.int64)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         token_type_ids: Optional[ms.Tensor] = None,
@@ -195,7 +197,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
             )
 
 
-class SeparableConv1D(nn.Cell):
+class SeparableConv1D(nn.Module):
     """This class implements separable convolution, i.e. a depthwise and a pointwise layer"""
     def __init__(self, config, input_filters, output_filters, kernel_size):
         """
@@ -227,10 +229,10 @@ class SeparableConv1D(nn.Cell):
             group=input_filters,
             pad_mode="pad",
             padding=kernel_size // 2,
-            has_bias=False,
+            bias=False,
         )
         self.pointwise = nn.Conv1d(
-            input_filters, output_filters, kernel_size=1, has_bias=False
+            input_filters, output_filters, kernel_size=1, bias=False
         )
         self.bias = ms.Parameter(ops.zeros((output_filters, 1)))
 
@@ -249,7 +251,7 @@ class SeparableConv1D(nn.Cell):
             )
         )
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         """
         Constructs a separable 1D convolution operation.
         
@@ -272,7 +274,7 @@ class SeparableConv1D(nn.Cell):
         return x
 
 
-class ConvBertSelfAttention(nn.Cell):
+class ConvBertSelfAttention(nn.Module):
     """
     ConvBertSelfAttention
     """
@@ -343,7 +345,7 @@ class ConvBertSelfAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         attention_mask: Optional[ms.Tensor] = None,
@@ -457,7 +459,7 @@ class ConvBertSelfAttention(nn.Cell):
         return outputs
 
 
-class ConvBertSelfOutput(nn.Cell):
+class ConvBertSelfOutput(nn.Module):
     """
     ConvBertSelfOutput
     """
@@ -477,10 +479,11 @@ class ConvBertSelfOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         """
         Constructs the output of the ConvBertSelfOutput layer.
         
@@ -504,7 +507,7 @@ class ConvBertSelfOutput(nn.Cell):
         return hidden_states
 
 
-class ConvBertAttention(nn.Cell):
+class ConvBertAttention(nn.Module):
     """
     ConvBertAttention
     """
@@ -551,7 +554,7 @@ class ConvBertAttention(nn.Cell):
         )
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         attention_mask: Optional[ms.Tensor] = None,
@@ -589,7 +592,7 @@ class ConvBertAttention(nn.Cell):
         return outputs
 
 
-class GroupedLinearLayer(nn.Cell):
+class GroupedLinearLayer(nn.Module):
     """
     GroupedLinearLayer
     """
@@ -620,7 +623,7 @@ class GroupedLinearLayer(nn.Cell):
         )
         self.bias = nn.Parameter(ops.zeros(output_size))
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         """Constructs a grouped linear layer.
         
         Args:
@@ -662,7 +665,7 @@ class GroupedLinearLayer(nn.Cell):
         return x
 
 
-class ConvBertIntermediate(nn.Cell):
+class ConvBertIntermediate(nn.Module):
     """
     ConvBertIntermediate
     """
@@ -705,7 +708,7 @@ class ConvBertIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         '''
         This method constructs the intermediate layer in the ConvBert model.
         
@@ -724,7 +727,7 @@ class ConvBertIntermediate(nn.Cell):
         return hidden_states
 
 
-class ConvBertOutput(nn.Cell):
+class ConvBertOutput(nn.Module):
     """
     ConvBertOutput
     """
@@ -757,10 +760,11 @@ class ConvBertOutput(nn.Cell):
                 output_size=config.hidden_size,
                 num_groups=config.num_groups,
             )
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         """
         Constructs the output tensor for the ConvBertOutput class.
         
@@ -781,7 +785,7 @@ class ConvBertOutput(nn.Cell):
         return hidden_states
 
 
-class ConvBertLayer(nn.Cell):
+class ConvBertLayer(nn.Module):
     """
     ConvBertLayer
     """
@@ -814,7 +818,7 @@ class ConvBertLayer(nn.Cell):
         self.intermediate = ConvBertIntermediate(config)
         self.output = ConvBertOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         attention_mask: Optional[ms.Tensor] = None,
@@ -886,7 +890,7 @@ class ConvBertLayer(nn.Cell):
         return layer_output
 
 
-class ConvBertEncoder(nn.Cell):
+class ConvBertEncoder(nn.Module):
     """
     ConvBertEncoder
     """
@@ -910,12 +914,12 @@ class ConvBertEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [ConvBertLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1005,7 +1009,7 @@ states, attentions, and cross-attentions.
         )
 
 
-class ConvBertPredictionHeadTransform(nn.Cell):
+class ConvBertPredictionHeadTransform(nn.Module):
     """
     ConvBertPredictionHeadTransform
     """
@@ -1036,9 +1040,10 @@ class ConvBertPredictionHeadTransform(nn.Cell):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         """
         This method constructs the prediction head transformation for ConvBert.
         
@@ -1130,7 +1135,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1231,7 +1236,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
         return hidden_states
 
 
-class ConvBertGeneratorPredictions(nn.Cell):
+class ConvBertGeneratorPredictions(nn.Module):
     """Prediction cell for the generator, made up of two dense layers."""
     def __init__(self, config):
         """
@@ -1251,11 +1256,11 @@ class ConvBertGeneratorPredictions(nn.Cell):
 
         self.activation = get_activation("gelu")
         self.LayerNorm = nn.LayerNorm(
-            config.embedding_size, epsilon=config.layer_norm_eps
+            config.embedding_size, eps=config.layer_norm_eps
         )
         self.dense = nn.Dense(config.hidden_size, config.embedding_size)
 
-    def construct(self, generator_hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, generator_hidden_states: ms.Tensor) -> ms.Tensor:
         """
         Constructs the generator predictions based on the given generator hidden states.
         
@@ -1340,7 +1345,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         """
         self.generator_lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1399,7 +1404,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         )
 
 
-class ConvBertClassificationHead(nn.Cell):
+class ConvBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
     def __init__(self, config):
         """
@@ -1427,7 +1432,7 @@ class ConvBertClassificationHead(nn.Cell):
 
         self.config = config
 
-    def construct(self, hidden_states: ms.Tensor, **kwargs) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, **kwargs) -> ms.Tensor:
         """
         This method constructs a classification head for ConvBert model.
         
@@ -1479,7 +1484,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1577,7 +1582,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1695,7 +1700,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,
@@ -1778,7 +1783,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         attention_mask: Optional[ms.Tensor] = None,

@@ -18,7 +18,9 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal, initializer
 
 from mindnlp.utils import logging
@@ -53,7 +55,7 @@ _CONFIG_FOR_DOC = "Data2VecTextConfig"
 
 
 # Copied from mindnlp.transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
-class Data2VecTextForTextEmbeddings(nn.Cell):
+class Data2VecTextForTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -74,7 +76,7 @@ class Data2VecTextForTextEmbeddings(nn.Cell):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -94,7 +96,7 @@ class Data2VecTextForTextEmbeddings(nn.Cell):
             padding_idx=self.padding_idx,
         )
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         token_type_ids=None,
@@ -166,7 +168,7 @@ class Data2VecTextForTextEmbeddings(nn.Cell):
 
 
 # Copied from mindnlp.transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Data2VecText
-class Data2VecTextSelfAttention(nn.Cell):
+class Data2VecTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
@@ -205,7 +207,7 @@ class Data2VecTextSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -326,16 +328,16 @@ class Data2VecTextSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class Data2VecTextSelfOutput(nn.Cell):
+class Data2VecTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor
     ) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -350,7 +352,7 @@ DATA2VEC_TEXT_SELF_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText,BERT->DATA2VEC_TEXT
-class Data2VecTextAttention(nn.Cell):
+class Data2VecTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         self.self = DATA2VEC_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
@@ -382,7 +384,7 @@ class Data2VecTextAttention(nn.Cell):
         )
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -409,7 +411,7 @@ class Data2VecTextAttention(nn.Cell):
 
 
 # Copied from mindnlp.transformers.models.bert.modeling_bert.BertIntermediate
-class Data2VecTextIntermediate(nn.Cell):
+class Data2VecTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -418,23 +420,23 @@ class Data2VecTextIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 # Copied from mindnlp.transformers.models.bert.modeling_bert.BertOutput
-class Data2VecTextOutput(nn.Cell):
+class Data2VecTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor
     ) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -444,7 +446,7 @@ class Data2VecTextOutput(nn.Cell):
 
 
 # Copied from mindnlp.transformers.models.bert.modeling_bert.BertLayer with Bert->Data2VecText
-class Data2VecTextLayer(nn.Cell):
+class Data2VecTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -463,7 +465,7 @@ class Data2VecTextLayer(nn.Cell):
         self.intermediate = Data2VecTextIntermediate(config)
         self.output = Data2VecTextOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -546,16 +548,16 @@ class Data2VecTextLayer(nn.Cell):
 
 
 # Copied from mindnlp.transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2VecText
-class Data2VecTextEncoder(nn.Cell):
+class Data2VecTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [Data2VecTextLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -644,13 +646,13 @@ class Data2VecTextEncoder(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class Data2VecTextPooler(nn.Cell):
+class Data2VecTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -681,7 +683,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
                     cell.weight.dtype,
                 )
             )
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(
                     initializer("zeros", cell.bias.shape, cell.bias.dtype)
                 )
@@ -706,7 +708,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
                 )
 
     # Copied from mindnlp.transformers.models.clap.modeling_clap.ClapTextModel.forward
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1074,7 +1076,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1245,7 +1247,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1309,21 +1311,21 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
 
 
 # Copied from mindnlp.transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Data2VecText
-class Data2VecTextLMHead(nn.Cell):
+class Data2VecTextLMHead(nn.Module):
     """Data2VecText Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
 
         self.decoder = nn.Dense(config.hidden_size, config.vocab_size)
         self.bias = mindspore.Parameter(ops.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -1354,7 +1356,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1440,7 +1442,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -1540,7 +1542,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1595,7 +1597,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
 
 
 # Copied from mindnlp.transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Data2VecText
-class Data2VecTextClassificationHead(nn.Cell):
+class Data2VecTextClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1609,7 +1611,7 @@ class Data2VecTextClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=classifier_dropout)
         self.out_proj = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
@@ -1630,7 +1632,7 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

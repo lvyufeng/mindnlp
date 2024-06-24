@@ -20,7 +20,9 @@ import math
 from typing import Dict, Optional, Set, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from mindspore.common.initializer import Normal
 
@@ -67,7 +69,7 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
     return int(new_value)
 
 
-class MobileViTConvLayer(nn.Cell):
+class MobileViTConvLayer(nn.Module):
     def __init__(
         self,
         config: MobileViTConfig,
@@ -99,7 +101,7 @@ class MobileViTConvLayer(nn.Cell):
             padding=padding,
             dilation=dilation,
             group=groups,
-            has_bias=bias,
+            bias=bias,
             pad_mode="pad",
         )
 
@@ -123,7 +125,7 @@ class MobileViTConvLayer(nn.Cell):
         else:
             self.activation = None
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         features = self.convolution(features)
         if self.normalization is not None:
             features = self.normalization(features)
@@ -132,7 +134,7 @@ class MobileViTConvLayer(nn.Cell):
         return features
 
 
-class MobileViTInvertedResidual(nn.Cell):
+class MobileViTInvertedResidual(nn.Module):
     """
     Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
     """
@@ -171,7 +173,7 @@ class MobileViTInvertedResidual(nn.Cell):
             use_activation=False,
         )
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         residual = features
 
         features = self.expand_1x1(features)
@@ -181,13 +183,13 @@ class MobileViTInvertedResidual(nn.Cell):
         return residual + features if self.use_residual else features
 
 
-class MobileViTMobileNetLayer(nn.Cell):
+class MobileViTMobileNetLayer(nn.Module):
     def __init__(
         self, config: MobileViTConfig, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
     ) -> None:
         super().__init__()
 
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         for i in range(num_stages):
             layer = MobileViTInvertedResidual(
                 config,
@@ -198,13 +200,13 @@ class MobileViTMobileNetLayer(nn.Cell):
             self.layer.append(layer)
             in_channels = out_channels
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         for layer_module in self.layer:
             features = layer_module(features)
         return features
 
 
-class MobileViTSelfAttention(nn.Cell):
+class MobileViTSelfAttention(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int) -> None:
         super().__init__()
 
@@ -220,11 +222,11 @@ class MobileViTSelfAttention(nn.Cell):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Dense(
-            hidden_size, self.all_head_size, has_bias=config.qkv_bias)
+            hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Dense(hidden_size, self.all_head_size,
-                            has_bias=config.qkv_bias)
+                            bias=config.qkv_bias)
         self.value = nn.Dense(
-            hidden_size, self.all_head_size, has_bias=config.qkv_bias)
+            hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -234,7 +236,7 @@ class MobileViTSelfAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -262,19 +264,19 @@ class MobileViTSelfAttention(nn.Cell):
         return context_layer
 
 
-class MobileViTSelfOutput(nn.Cell):
+class MobileViTSelfOutput(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int) -> None:
         super().__init__()
         self.dense = nn.Dense(hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
 
-class MobileViTAttention(nn.Cell):
+class MobileViTAttention(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int) -> None:
         super().__init__()
         self.attention = MobileViTSelfAttention(config, hidden_size)
@@ -301,13 +303,13 @@ class MobileViTAttention(nn.Cell):
             self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         self_outputs = self.attention(hidden_states)
         attention_output = self.output(self_outputs)
         return attention_output
 
 
-class MobileViTIntermediate(nn.Cell):
+class MobileViTIntermediate(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.dense = nn.Dense(hidden_size, intermediate_size)
@@ -316,26 +318,26 @@ class MobileViTIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-class MobileViTOutput(nn.Cell):
+class MobileViTOutput(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.dense = nn.Dense(intermediate_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-class MobileViTTransformerLayer(nn.Cell):
+class MobileViTTransformerLayer(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.attention = MobileViTAttention(config, hidden_size)
@@ -343,11 +345,13 @@ class MobileViTTransformerLayer(nn.Cell):
             config, hidden_size, intermediate_size)
         self.output = MobileViTOutput(config, hidden_size, intermediate_size)
         self.layernorm_before = nn.LayerNorm(
-            hidden_size, epsilon=config.layer_norm_eps)
+            hidden_size, eps=
+config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(
-            hidden_size, epsilon=config.layer_norm_eps)
+            hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         attention_output = self.attention(self.layernorm_before(hidden_states))
         hidden_states = attention_output + hidden_states
 
@@ -357,11 +361,11 @@ class MobileViTTransformerLayer(nn.Cell):
         return layer_output
 
 
-class MobileViTTransformer(nn.Cell):
+class MobileViTTransformer(nn.Module):
     def __init__(self, config: MobileViTConfig, hidden_size: int, num_stages: int) -> None:
         super().__init__()
 
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         for _ in range(num_stages):
             transformer_layer = MobileViTTransformerLayer(
                 config,
@@ -370,13 +374,13 @@ class MobileViTTransformer(nn.Cell):
             )
             self.layer.append(transformer_layer)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
         return hidden_states
 
 
-class MobileViTLayer(nn.Cell):
+class MobileViTLayer(nn.Module):
     """
     MobileViT block: https://arxiv.org/abs/2110.02178
     """
@@ -430,7 +434,8 @@ class MobileViTLayer(nn.Cell):
         )
 
         self.layernorm = nn.LayerNorm(
-            hidden_size, epsilon=config.layer_norm_eps)
+            hidden_size, eps=
+config.layer_norm_eps)
 
         self.conv_projection = MobileViTConvLayer(
             config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1
@@ -514,7 +519,7 @@ class MobileViTLayer(nn.Cell):
 
         return features
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         # reduce spatial dimensions if needed
         if self.downsampling_layer:
             features = self.downsampling_layer(features)
@@ -540,12 +545,12 @@ class MobileViTLayer(nn.Cell):
         return features
 
 
-class MobileViTEncoder(nn.Cell):
+class MobileViTEncoder(nn.Module):
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__()
         self.config = config
 
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         self.gradient_checkpointing = False
 
         # segmentation architectures like DeepLab and PSPNet modify the strides
@@ -615,7 +620,7 @@ class MobileViTEncoder(nn.Cell):
         )
         self.layer.append(layer_5)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         output_hidden_states: bool = False,
@@ -701,7 +706,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
                 for transformer_layer in mobilevit_layer.transformer.layer:
                     transformer_layer.attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -762,7 +767,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -820,7 +825,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         )
 
 
-class MobileViTASPPPooling(nn.Cell):
+class MobileViTASPPPooling(nn.Module):
     def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
@@ -836,7 +841,7 @@ class MobileViTASPPPooling(nn.Cell):
             use_activation="relu",
         )
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         spatial_size = features.shape[-2:]
         features = self.global_pool(features)
         features = self.conv_1x1(features)
@@ -845,7 +850,7 @@ class MobileViTASPPPooling(nn.Cell):
         return features
 
 
-class MobileViTASPP(nn.Cell):
+class MobileViTASPP(nn.Module):
     """
     ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
     """
@@ -859,7 +864,7 @@ class MobileViTASPP(nn.Cell):
         if len(config.atrous_rates) != 3:
             raise ValueError("Expected 3 values for atrous_rates")
 
-        self.convs = nn.CellList()
+        self.convs = nn.ModuleList()
 
         in_projection = MobileViTConvLayer(
             config,
@@ -893,7 +898,7 @@ class MobileViTASPP(nn.Cell):
 
         self.dropout = nn.Dropout(p=config.aspp_dropout_prob)
 
-    def construct(self, features: ms.Tensor) -> ms.Tensor:
+    def forward(self, features: ms.Tensor) -> ms.Tensor:
         pyramid = []
         for conv in self.convs:
             pyramid.append(conv(features))
@@ -904,7 +909,7 @@ class MobileViTASPP(nn.Cell):
         return pooled_features
 
 
-class MobileViTDeepLabV3(nn.Cell):
+class MobileViTDeepLabV3(nn.Module):
     """
     DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
     """
@@ -925,7 +930,7 @@ class MobileViTDeepLabV3(nn.Cell):
             bias=True,
         )
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         features = self.aspp(hidden_states[-1])
         features = self.dropout(features)
         features = self.classifier(features)
@@ -943,7 +948,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         labels: Optional[ms.Tensor] = None,

@@ -823,6 +823,7 @@ along the second and third axes.
             key_states_fft = ops.rfft(key_states, n=tgt_len, dim=1)
             attn_weights = query_states_fft * ops.conj(key_states_fft)
             attn_weights = ops.irfft(attn_weights, n=tgt_len, dim=1)  # Autocorrelation(Q,K)
+            attn_weights.shape
         except:
             rfft_net = ops.FFTWithSize(signal_ndim=3, inverse=False, real=True)
             if query_states.shape[1] < tgt_len:
@@ -1240,7 +1241,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
             None.
         """
         std = self.config.init_std
-        if isinstance(cell, (nn.Dense, nn.Conv1d)):
+        if isinstance(cell, (nn.Linear, nn.Dense, nn.Conv1d)):
             cell.weight.set_data(initializer(Normal(std),
                                              cell.weight.shape,
                                              cell.weight.dtype))

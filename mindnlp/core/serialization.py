@@ -40,7 +40,10 @@ def load_checkpoint(ckpt_file_name):
     """
     Load checkpoint info from a specified file.
     """
-    checkpoint_list = _parse_ckpt_proto(ckpt_file_name, None, None)
+    try:
+        checkpoint_list = _parse_ckpt_proto(ckpt_file_name, None, None)
+    except:
+        checkpoint_list = _parse_ckpt_proto(ckpt_file_name, None, None, None)
 
     parameter_dict = {}
     try:

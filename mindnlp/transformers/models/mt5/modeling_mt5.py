@@ -21,7 +21,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, Constant
 
 from mindnlp.utils import (
@@ -47,12 +49,12 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->MT5
-class MT5LayerNorm(nn.Cell):
+class MT5LayerNorm(nn.Module):
 
     """
     Represents a layer normalization module in the MT5 style with no bias and no subtraction of mean.
     
-    This class inherits from nn.Cell and provides functionality for layer normalization in the MT5 style. 
+    This class inherits from nn.Module and provides functionality for layer normalization in the MT5 style. 
     The constructor initializes the layer normalization module with the specified hidden size and epsilon value. 
     The 'construct' method accepts hidden states as input, calculates the variance, and normalizes the hidden states using the calculated variance and epsilon value. 
     If the weight data type is float16 or bfloat16, the hidden states are converted to the weight data type before returning the weighted normalized hidden states.
@@ -73,7 +75,7 @@ class MT5LayerNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size), 'weight')
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Method to perform layer normalization on hidden states.
         
@@ -105,13 +107,13 @@ class MT5LayerNorm(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->MT5
-class MT5DenseActDense(nn.Cell):
+class MT5DenseActDense(nn.Module):
 
     """
     MT5DenseActDense is a neural network module that implements a specific architecture for processing hidden states in the MT5 model. 
     It consists of two dense layers with an activation function and dropout in between.
     
-    Inherits from nn.Cell.
+    Inherits from nn.Module.
     
     The __init__ method initializes the MT5DenseActDense module with the provided MT5Config object.
     It sets up the internal components including two dense layers, a dropout layer, and an activation function.
@@ -140,12 +142,12 @@ class MT5DenseActDense(nn.Cell):
             - ValueError: If any of the configuration parameters are missing or invalid.
         """
         super().__init__()
-        self.wi = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Dense(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs the hidden states by applying operations and transformations.
         
@@ -175,10 +177,10 @@ class MT5DenseActDense(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->MT5
-class MT5DenseGatedActDense(nn.Cell):
+class MT5DenseGatedActDense(nn.Module):
 
     """
-    This class represents a dense gated activation module for the MT5 model. It inherits from the nn.Cell class.
+    This class represents a dense gated activation module for the MT5 model. It inherits from the nn.Module class.
     
     The MT5DenseGatedActDense class contains methods to initialize and construct the dense gated activation module.
     
@@ -219,13 +221,13 @@ class MT5DenseGatedActDense(nn.Cell):
             KeyError: If the activation function specified in the configuration is not supported.
         """
         super().__init__()
-        self.wi_0 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wi_1 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi_0 = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Dense(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs the hidden states by applying a series of transformations.
         
@@ -259,10 +261,10 @@ class MT5DenseGatedActDense(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->MT5
-class MT5LayerFF(nn.Cell):
+class MT5LayerFF(nn.Module):
 
     """
-    MT5LayerFF is a Python class representing a feed-forward layer for the MT5 model. It inherits from nn.Cell and contains methods for initialization and forward propagation.
+    MT5LayerFF is a Python class representing a feed-forward layer for the MT5 model. It inherits from nn.Module and contains methods for initialization and forward propagation.
     
     The __init__ method initializes the MT5LayerFF instance with the provided configuration. It checks if the configuration includes gated activation and assigns the appropriate DenseReluDense module
 accordingly. Additionally, it sets up layer normalization and dropout.
@@ -295,7 +297,7 @@ accordingly. Additionally, it sets up layer normalization and dropout.
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the forward pass of the feed-forward layer in the MT5 model.
         
@@ -333,12 +335,12 @@ of the hidden states to zero during training, which helps prevent overfitting an
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
-class MT5Attention(nn.Cell):
+class MT5Attention(nn.Module):
 
     """
     The `MT5Attention` class is a module that implements the attention mechanism used in the MT5 model. It is designed to be used as a building block for the Transformer-based models.
     
-    This class inherits from the `nn.Cell` class, which is the base class for all neural network modules in MindSpore.
+    This class inherits from the `nn.Module` class, which is the base class for all neural network modules in MindSpore.
     
     The main purpose of this class is to compute the attention weights and output of the attention mechanism. It takes in the hidden states, mask, key-value states, position bias, past key-value states, layer
 head mask, query length, use cache flag, and output attentions flag as inputs.
@@ -394,10 +396,10 @@ the attention mechanism by applying self-attention (if `key_value_states` is Non
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.k = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.v = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.o = nn.Dense(self.inner_dim, self.d_model, has_bias=False)
+        self.q = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.k = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.v = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.o = nn.Dense(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -499,7 +501,7 @@ errors.
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         mask=None,
@@ -628,12 +630,12 @@ errors.
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MT5
-class MT5LayerSelfAttention(nn.Cell):
+class MT5LayerSelfAttention(nn.Module):
 
     """
     This class represents a self-attention mechanism used in the MT5 (Multilingual Translation) model. It is designed to be used as a layer within the MT5 model.
     
-    This class inherits from the nn.Cell class, which is a base class for all neural network modules in PyTorch.
+    This class inherits from the nn.Module class, which is a base class for all neural network modules in MindSpore.
     
     Attributes:
         SelfAttention (MT5Attention): An instance of the MT5Attention class that performs the self-attention computation.
@@ -678,7 +680,7 @@ class MT5LayerSelfAttention(nn.Cell):
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -741,12 +743,12 @@ class MT5LayerSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->MT5
-class MT5LayerCrossAttention(nn.Cell):
+class MT5LayerCrossAttention(nn.Module):
 
     """
     MT5LayerCrossAttention represents a layer for cross-attention mechanism in the MT5 model.
     
-    This class inherits from nn.Cell and includes methods for initializing the layer and constructing the cross-attention mechanism.
+    This class inherits from nn.Module and includes methods for initializing the layer and constructing the cross-attention mechanism.
     
     Attributes:
         EncDecAttention: An instance of the MT5Attention class for encoder-decoder attention mechanism.
@@ -779,7 +781,7 @@ Constructs the cross-attention mechanism using the given parameters and returns 
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         key_value_states,
@@ -832,7 +834,7 @@ Constructs the cross-attention mechanism using the given parameters and returns 
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->MT5
-class MT5Block(nn.Cell):
+class MT5Block(nn.Module):
 
     """
     This class represents a block of the MT5 model, which is a Transformer-based neural network architecture for sequence-to-sequence tasks. It consists of a self-attention layer, an optional cross-attention
@@ -840,13 +842,13 @@ layer, and a feed-forward layer.
     
     Attributes:
         - `is_decoder` (bool): Indicates whether the block is used in the decoder part of the model.
-        - `layer` (nn.CellList): A list of layers in the block, including the self-attention, cross-attention, and feed-forward layers.
+        - `layer` (nn.ModuleList): A list of layers in the block, including the self-attention, cross-attention, and feed-forward layers.
     
     Methods:
         - `construct`: Performs the forward pass of the block, processing the input hidden states and generating the outputs.
     
     Details:
-    The `MT5Block` class inherits from the `nn.Cell` class and overrides the `construct` method. The `__init__` method initializes the block's attributes, including the `is_decoder` flag and the list of layers.
+    The `MT5Block` class inherits from the `nn.Module` class and overrides the `construct` method. The `__init__` method initializes the block's attributes, including the `is_decoder` flag and the list of layers.
     
     The `construct` method takes various input parameters, including the hidden states, attention masks, position biases, and layer head masks. It also accepts optional parameters for encoder hidden states and
 attention masks, as well as past key-value states used for caching.
@@ -882,14 +884,14 @@ outputs, such as present key-value states and attention outputs, depending on th
         """
         super().__init__()
         self.is_decoder = config.is_decoder
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         self.layer.append(MT5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
             self.layer.append(MT5LayerCrossAttention(config))
 
         self.layer.append(MT5LayerFF(config))
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1032,7 +1034,7 @@ outputs, such as present key-value states and attention outputs, depending on th
 
 
 # Copied from transformers.models.t5.modeling_t5.T5ClassificationHead with T5->MT5
-class MT5ClassificationHead(nn.Cell):
+class MT5ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
     def __init__(self, config: MT5Config):
         """
@@ -1057,7 +1059,7 @@ class MT5ClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=config.classifier_dropout)
         self.out_proj = nn.Dense(config.d_model, config.num_labels)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the classification head for an MT5 model.
         
@@ -1284,7 +1286,7 @@ use_cache=None, output_attentions=None, output_hidden_states=None, return_dict=N
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
-        self.block = nn.CellList(
+        self.block = nn.ModuleList(
             [MT5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -1331,7 +1333,7 @@ use_cache=None, output_attentions=None, output_hidden_states=None, return_dict=N
         """
         self.embed_tokens = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1661,7 +1663,7 @@ class MT5Model(MT5PreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     # Copied from transformers.models.t5.modeling_t5.T5Model.forward with T5->MT5, t5->mt5
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1822,7 +1824,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = MT5Stack(decoder_config, self.shared)
 
-        self.lm_head = nn.Dense(config.d_model, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1934,7 +1936,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         return self.decoder
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with T5->MT5, t5->mt5
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2299,7 +2301,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->MT5, t5->mt5
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2394,7 +2396,7 @@ generating predictions.
         self.post_init()
 
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2632,7 +2634,7 @@ decoder_inputs_embeds, use_cache, output_attentions, output_hidden_states, retur
         return self.decoder
 
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.forward
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

@@ -23,8 +23,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor, Parameter
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
 
 from mindnlp.utils import logging
 from ...backbone_utils import BackboneMixin
@@ -105,7 +107,7 @@ def drop_path(input: mindspore.Tensor, drop_prob: float = 0.0, training: bool = 
     return output
 
 
-class BeitDropPath(nn.Cell):
+class BeitDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         """
@@ -126,7 +128,7 @@ class BeitDropPath(nn.Cell):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a new tensor by applying drop path regularization to the input hidden states.
         
@@ -164,7 +166,7 @@ class BeitDropPath(nn.Cell):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class BeitEmbeddings(nn.Cell):
+class BeitEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
@@ -199,7 +201,7 @@ class BeitEmbeddings(nn.Cell):
             self.position_embeddings = None
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, pixel_values: mindspore.Tensor, bool_masked_pos: Optional[mindspore.Tensor] = None) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor, bool_masked_pos: Optional[mindspore.Tensor] = None) -> mindspore.Tensor:
         """
         Construct method in the BeitEmbeddings class.
         
@@ -239,7 +241,7 @@ class BeitEmbeddings(nn.Cell):
         return embeddings, (patch_height, patch_width)
 
 
-class BeitPatchEmbeddings(nn.Cell):
+class BeitPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -278,9 +280,9 @@ width of the rectangular patch.
         self.num_patches = num_patches
         self.patch_shape = patch_shape
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, has_bias=True)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def construct(self, pixel_values: mindspore.Tensor, position_embedding: Optional[mindspore.Tensor] = None) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor, position_embedding: Optional[mindspore.Tensor] = None) -> mindspore.Tensor:
         ''' 
         Constructs patch embeddings for the Beit model.
         
@@ -320,7 +322,7 @@ width of the rectangular patch.
         return embeddings, (patch_height, patch_width)
 
 
-class BeitSelfAttention(nn.Cell):
+class BeitSelfAttention(nn.Module):
 
     """
     Represents the self-attention mechanism for the Beit model.
@@ -375,7 +377,7 @@ layer, swapping axes for attention scores, and constructing the self-attention m
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Dense(config.hidden_size, self.all_head_size)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=False)
+        self.key = nn.Dense(config.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Dense(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
@@ -405,7 +407,7 @@ performed in place on the input tensor.
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -470,7 +472,7 @@ performed in place on the input tensor.
         return outputs
 
 
-class BeitSelfOutput(nn.Cell):
+class BeitSelfOutput(nn.Module):
     """
     The residual connection is defined in BeitLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -495,7 +497,7 @@ class BeitSelfOutput(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor, gamma=None) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor, gamma=None) -> mindspore.Tensor:
         """
         This method 'construct' is defined within the 'BeitSelfOutput' class and is responsible for constructing the hidden states using the provided input tensors and optional gamma parameter.
         
@@ -517,10 +519,10 @@ class BeitSelfOutput(nn.Cell):
         return hidden_states
 
 
-class BeitAttention(nn.Cell):
+class BeitAttention(nn.Module):
 
     """
-    The `BeitAttention` class represents the attention mechanism for the Beit model, inheriting from `nn.Cell`. It includes methods for initializing the attention mechanism, pruning attention heads, and
+    The `BeitAttention` class represents the attention mechanism for the Beit model, inheriting from `nn.Module`. It includes methods for initializing the attention mechanism, pruning attention heads, and
 constructing the attention output. 
     
     Attributes:
@@ -590,7 +592,7 @@ Union[Tuple[mindspore.Tensor], Tuple[mindspore.Tensor, mindspore.Tensor]]:
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -624,10 +626,10 @@ Union[Tuple[mindspore.Tensor], Tuple[mindspore.Tensor, mindspore.Tensor]]:
         return outputs
 
 
-class BeitIntermediate(nn.Cell):
+class BeitIntermediate(nn.Module):
 
     """
-    This class represents an intermediate layer of the Beit model. It is a subclass of nn.Cell and is responsible for processing the hidden states of the model.
+    This class represents an intermediate layer of the Beit model. It is a subclass of nn.Module and is responsible for processing the hidden states of the model.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that transforms the input hidden states.
@@ -673,7 +675,7 @@ If 'hidden_act' is a string, it is looked up in the 'ACT2FN' dictionary to obtai
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the intermediate layer of the Beit model.
         
@@ -696,10 +698,10 @@ If 'hidden_act' is a string, it is looked up in the 'ACT2FN' dictionary to obtai
         return hidden_states
 
 
-class BeitOutput(nn.Cell):
+class BeitOutput(nn.Module):
 
     """
-    This class represents the output layer of the Beit model, inheriting from the nn.Cell class.
+    This class represents the output layer of the Beit model, inheriting from the nn.Module class.
     
     The BeitOutput class applies a dense layer and a dropout layer to the input hidden states. These layers are configured based on the provided BeitConfig.
     
@@ -738,7 +740,7 @@ class BeitOutput(nn.Cell):
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the output tensor for the Beit model.
         
@@ -758,7 +760,7 @@ class BeitOutput(nn.Cell):
         return hidden_states
 
 
-class BeitLayer(nn.Cell):
+class BeitLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
         """
@@ -783,9 +785,9 @@ class BeitLayer(nn.Cell):
         self.attention = BeitAttention(config, window_size=window_size)
         self.intermediate = BeitIntermediate(config)
         self.output = BeitOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
         if init_values > 0:
@@ -794,7 +796,7 @@ class BeitLayer(nn.Cell):
         else:
             self.lambda_1, self.lambda_2 = None, None
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -853,14 +855,14 @@ class BeitLayer(nn.Cell):
         return outputs
 
 
-class BeitRelativePositionBias(nn.Cell):
+class BeitRelativePositionBias(nn.Module):
 
     """
     BeitRelativePositionBias
     
     Represents the relative position bias table used in the Beit model for attention mechanism.
     
-    This class inherits from nn.Cell and provides functionality to construct the relative position bias table by calculating relative positions and indexing.
+    This class inherits from nn.Module and provides functionality to construct the relative position bias table by calculating relative positions and indexing.
     
     The relative position bias table is constructed based on the provided configuration and window size. It contains the relative positional biases used in the attention mechanism of the Beit model.
     
@@ -911,7 +913,7 @@ position bias table as a mindspore.Tensor.
 
         self.relative_position_index = relative_position_index
 
-    def construct(self) -> mindspore.Tensor:
+    def forward(self) -> mindspore.Tensor:
         """
         This method constructs relative position bias based on the given relative position index and window size.
         
@@ -932,7 +934,7 @@ position bias table as a mindspore.Tensor.
         return relative_position_bias.permute(2, 0, 1)  # nH, Wh*Ww, Wh*Ww
 
 
-class BeitEncoder(nn.Cell):
+class BeitEncoder(nn.Module):
 
     """
     The BeitEncoder class represents an encoder for the Beit (Vision Transformer) model. It is used to process input data and generate encoded representations. The encoder contains layers and handles gradient
@@ -947,7 +949,7 @@ checkpointing, if enabled.
             The configuration object for the BeitEncoder.
         - relative_position_bias: Union[BeitRelativePositionBias, None]
             The relative position bias object used in the encoder if enabled.
-        - layer: nn.CellList
+        - layer: nn.ModuleList
             List of BeitLayer instances representing the layers in the encoder.
         - gradient_checkpointing: bool
             Indicates whether gradient checkpointing is enabled.
@@ -984,7 +986,7 @@ Union[tuple, BaseModelOutput]
 
         # stochastic depth decay rule
         dpr = [x.item() for x in ops.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [
                 BeitLayer(
                     config,
@@ -996,7 +998,7 @@ Union[tuple, BaseModelOutput]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -1064,12 +1066,12 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, cell):
         """Initialize the weights"""
-        if isinstance(cell, (nn.Dense, nn.Conv2d, nn.Conv2dTranspose)):
+        if isinstance(cell, (nn.Dense, nn.Conv2d, nn.ConvTranspose2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -1139,7 +1141,7 @@ positions, head masks, and return types.
         self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         self.layernorm = (
-            nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+            nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
         self.pooler = BeitPooler(config) if add_pooling_layer else None
 
@@ -1169,7 +1171,7 @@ positions, head masks, and return types.
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         bool_masked_pos: Optional[mindspore.Tensor] = None,
@@ -1223,12 +1225,12 @@ positions, head masks, and return types.
         )
 
 
-class BeitPooler(nn.Cell):
+class BeitPooler(nn.Module):
 
     """
     This class represents a pooler module for the Beit model. It is responsible for performing pooling operations on the hidden states of the model.
     
-    The BeitPooler class inherits from the nn.Cell class.
+    The BeitPooler class inherits from the nn.Module class.
     
     Attributes:
         layernorm (nn.LayerNorm, optional): A LayerNorm module that applies layer normalization to the hidden states. If the configuration allows mean pooling, this attribute is initialized with a LayerNorm
@@ -1273,10 +1275,10 @@ module. Otherwise, it is set to None.
         """
         super().__init__()
         self.layernorm = (
-            nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps) if config.use_mean_pooling else None
+            nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
         )
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Construct the pooled output tensor from the given hidden states.
         
@@ -1356,13 +1358,13 @@ use the BeitForMaskedImageModeling class for masked image modeling tasks.
         self.beit = BeitModel(config, add_pooling_layer=False)
 
         # Classifier head
-        self.layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.lm_head = nn.Dense(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         bool_masked_pos: Optional[mindspore.Tensor] = None,
@@ -1485,7 +1487,7 @@ output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None)
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -1544,7 +1546,7 @@ output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None)
         )
 
 
-class BeitConvModule(nn.Cell):
+class BeitConvModule(nn.Module):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
     layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
@@ -1590,15 +1592,14 @@ class BeitConvModule(nn.Cell):
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            padding=padding if isinstance(padding, (int, tuple)) else 0,
-            pad_mode='pad' if padding != 0 else 'valid',
-            has_bias=bias,
+            padding=padding,
+            bias=bias,
             dilation=dilation,
         )
         self.bn = nn.BatchNorm2d(out_channels)
         self.activation = nn.ReLU()
 
-    def construct(self, input: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, input: mindspore.Tensor) -> mindspore.Tensor:
         ''' 
         The 'construct' method constructs the BeitConvModule.
         
@@ -1619,11 +1620,11 @@ class BeitConvModule(nn.Cell):
         return output
 
 
-class BeitPyramidPoolingBlock(nn.Cell):
+class BeitPyramidPoolingBlock(nn.Module):
 
     """
     BeitPyramidPoolingBlock is a class that represents a block for performing pyramid pooling operations in a neural network. 
-    It inherits from nn.Cell and contains methods for initialization and constructing the block.
+    It inherits from nn.Module and contains methods for initialization and constructing the block.
     
     Attributes:
         pool_scale (int): The scale used for adaptive average pooling.
@@ -1666,7 +1667,7 @@ class BeitPyramidPoolingBlock(nn.Cell):
             setattr(self, str(i), layer)
             # self(str(i), layer)
 
-    def construct(self, input: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, input: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the BeitPyramidPoolingBlock by applying the specified layers to the input tensor.
         
@@ -1686,7 +1687,7 @@ class BeitPyramidPoolingBlock(nn.Cell):
         return hidden_state
 
 
-class BeitPyramidPoolingModule(nn.Cell):
+class BeitPyramidPoolingModule(nn.Module):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
 
@@ -1727,7 +1728,7 @@ class BeitPyramidPoolingModule(nn.Cell):
             setattr(self, str(i), block)
             # self._add_attr(str(i), block)
 
-    def construct(self, x: mindspore.Tensor) -> List[mindspore.Tensor]:
+    def forward(self, x: mindspore.Tensor) -> List[mindspore.Tensor]:
         """
         Constructs the Beit Pyramid Pooling Module.
         
@@ -1752,7 +1753,7 @@ class BeitPyramidPoolingModule(nn.Cell):
         return ppm_outs
 
 
-class BeitUperHead(nn.Cell):
+class BeitUperHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
     [UPerNet](https://arxiv.org/abs/1807.10221).
@@ -1779,7 +1780,7 @@ class BeitUperHead(nn.Cell):
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
         self.align_corners = False
-        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1, has_bias=True)
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
         # PSP Module
         self.psp_modules = BeitPyramidPoolingModule(
@@ -1795,8 +1796,8 @@ class BeitUperHead(nn.Cell):
             padding=1,
         )
         # FPN Module
-        self.lateral_convs = nn.CellList()
-        self.fpn_convs = nn.CellList()
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
             l_conv = BeitConvModule(in_channels, self.channels, kernel_size=1)
             fpn_conv = BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1)
@@ -1832,7 +1833,7 @@ class BeitUperHead(nn.Cell):
 
         return output
 
-    def construct(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the Feature Pyramid Network (FPN) for the UperHead module in the Beit architecture.
         
@@ -1879,7 +1880,7 @@ class BeitUperHead(nn.Cell):
         return output
 
 
-class BeitFCNHead(nn.Cell):
+class BeitFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is implemented of
     [FCNNet](https://arxiv.org/abs/1411.4038>).
@@ -1935,15 +1936,15 @@ class BeitFCNHead(nn.Cell):
         if self.num_convs == 0:
             self.convs = nn.Identity()
         else:
-            self.convs = nn.SequentialCell(*convs)
+            self.convs = nn.Sequential(*convs)
         if self.concat_input:
             self.conv_cat = BeitConvModule(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 
-        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1, has_bias=True)
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
-    def construct(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         '''
         This method constructs the FCN (Fully Convolutional Network) head for the Beit model.
         
@@ -2013,14 +2014,14 @@ for semantic segmentation tasks.
                 "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
                 "a base-sized architecture."
             )
-        self.fpn1 = nn.SequentialCell(
-            nn.Conv2dTranspose(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, has_bias=True),
+        self.fpn1 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, bias=True),
             nn.BatchNorm2d(config.hidden_size),
             nn.GELU(),
-            nn.Conv2dTranspose(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, has_bias=True),
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, bias=True),
         )
-        self.fpn2 = nn.SequentialCell(
-            nn.Conv2dTranspose(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, has_bias=True),
+        self.fpn2 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2, bias=True),
         )
         self.fpn3 = nn.Identity()
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -2067,7 +2068,7 @@ for semantic segmentation tasks.
 
         return loss
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -2244,14 +2245,14 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
                     "a base-sized architecture."
                 )
             hidden_size = config.hidden_size
-            self.fpn1 = nn.SequentialCell(
-                nn.Conv2dTranspose(hidden_size, hidden_size, kernel_size=2, stride=2, has_bias=True),
+            self.fpn1 = nn.Sequential(
+                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2, bias=True),
                 nn.BatchNorm2d(hidden_size, eps=config.batch_norm_eps),
                 nn.GELU(),
-                nn.Conv2dTranspose(hidden_size, hidden_size, kernel_size=2, stride=2, has_bias=True),
+                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2, bias=True),
             )
 
-            self.fpn2 = nn.SequentialCell(nn.Conv2dTranspose(hidden_size, hidden_size, kernel_size=2, stride=2, has_bias=True))
+            self.fpn2 = nn.Sequential(nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2, bias=True))
             self.fpn3 = nn.Identity()
             self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -2279,7 +2280,7 @@ analysis.
         """
         return self.embeddings.patch_embeddings
 
-    def construct(
+    def forward(
         self,
         pixel_values: Tensor,
         output_hidden_states: Optional[bool] = None,

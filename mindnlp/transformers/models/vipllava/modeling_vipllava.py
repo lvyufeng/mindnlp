@@ -20,7 +20,10 @@ from functools import reduce
 import numpy as np
 
 import mindspore as ms
-from mindspore import nn, Tensor, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 
 from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
@@ -78,12 +81,12 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[Tensor]] = None
 
 
-class VipLlavaMultiModalProjector(nn.Cell):
+class VipLlavaMultiModalProjector(nn.Module):
 
     """
     Represents a multi-modal projector for the VipLlava model, used to project hidden states from both vision and text modalities.
     
-    This class inherits from nn.Cell and contains methods to initialize the projector and construct the projection process.
+    This class inherits from nn.Module and contains methods to initialize the projector and construct the projection process.
     
     Attributes:
         projector_layernorm (nn.LayerNorm): Layer normalization for the projector.
@@ -112,20 +115,21 @@ class VipLlavaMultiModalProjector(nn.Cell):
         """
         super().__init__()
         self.projector_layernorm = nn.LayerNorm(
-            len(config.vision_feature_layers) * config.vision_config.hidden_size, epsilon=config.projector_layernorm_eps
+            len(config.vision_feature_layers) * config.vision_config.hidden_size, eps=
+config.projector_layernorm_eps
         )
 
         self.linear_1 = nn.Dense(
             len(config.vision_feature_layers) *
             config.vision_config.hidden_size,
             config.text_config.hidden_size,
-            has_bias=True,
+            bias=True,
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Dense(
-            config.text_config.hidden_size, config.text_config.hidden_size, has_bias=True)
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         
         construct(self, hidden_states)
@@ -155,8 +159,8 @@ VIPLLAVA_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -202,7 +206,7 @@ bias tensor with zeros. If the module is an instance of nn.Embedding, it sets th
             module: The module for which weights are to be initialized.
                 Type: Any valid module object.
                 Purpose: Represents the module whose weights are to be initialized.
-                Restrictions: The module should be a valid PyTorch module.
+                Restrictions: The module should be a valid MindSpore module.
         
         Returns:
             None. This method does not return any value.
@@ -594,7 +598,7 @@ token embeddings as an instance of nn.Embedding.
         return final_embedding, final_attention_mask, final_labels, position_ids
 
     # Ignore copy
-    def construct(
+    def forward(
         self,
         input_ids: Tensor = None,
         pixel_values: Tensor = None,

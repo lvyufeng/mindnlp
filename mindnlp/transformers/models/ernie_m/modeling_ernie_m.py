@@ -22,7 +22,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -51,7 +54,7 @@ ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Adapted from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
-class ErnieMEmbeddings(nn.Cell):
+class ErnieMEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
     def __init__(self, config):
         """
@@ -73,11 +76,11 @@ normalization epsilon, and hidden dropout probability.
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=config.pad_token_id
         )
-        self.layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.padding_idx = config.pad_token_id
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         position_ids: Optional[mindspore.Tensor] = None,
@@ -122,11 +125,11 @@ normalization epsilon, and hidden dropout probability.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM,self.value->self.v_proj,self.key->self.k_proj,self.query->self.q_proj
-class ErnieMSelfAttention(nn.Cell):
+class ErnieMSelfAttention(nn.Module):
 
     """A module that implements the self-attention mechanism used in ERNIE model.
     
-    This module contains the `ErnieMSelfAttention` class, which represents the self-attention mechanism used in the ERNIE model. It is a subclass of `nn.Cell` and is responsible for calculating the attention
+    This module contains the `ErnieMSelfAttention` class, which represents the self-attention mechanism used in the ERNIE model. It is a subclass of `nn.Module` and is responsible for calculating the attention
 scores and producing the context layer.
     
     Attributes:
@@ -215,7 +218,7 @@ scores and producing the context layer.
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -339,12 +342,12 @@ scores and producing the context layer.
         return outputs
 
 
-class ErnieMAttention(nn.Cell):
+class ErnieMAttention(nn.Module):
 
     """
     ErnieMAttention is a class that represents an attention mechanism used in the ERNIE-M model. 
     It contains methods for initializing the attention mechanism, pruning attention heads, and constructing attention outputs. 
-    This class inherits from nn.Cell and utilizes an ErnieMSelfAttention module for self-attention calculations.
+    This class inherits from nn.Module and utilizes an ErnieMSelfAttention module for self-attention calculations.
     The attention mechanism includes projection layers for query, key, and value, as well as an output projection layer.
     The `prune_heads` method allows for pruning specific attention heads based on provided indices.
     The `construct` method processes input hidden states through the self-attention mechanism and output projection layer to generate attention outputs.
@@ -401,7 +404,7 @@ exceptions related to input validation or processing errors.
         self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -444,11 +447,11 @@ exceptions related to input validation or processing errors.
         return outputs
 
 
-class ErnieMEncoderLayer(nn.Cell):
+class ErnieMEncoderLayer(nn.Module):
 
     """
     The ErnieMEncoderLayer class represents a single layer of the ErnieM (Enhanced Representation through kNowledge Integration) encoder, which is designed for natural language processing tasks. This class
-inherits from the nn.Cell class and implements the functionality for processing input hidden states using multi-head self-attention mechanism and feedforward neural network layers with layer normalization and
+inherits from the nn.Module class and implements the functionality for processing input hidden states using multi-head self-attention mechanism and feedforward neural network layers with layer normalization and
 dropout.
     
     Attributes:
@@ -505,8 +508,8 @@ dropout.
         self.linear1 = nn.Dense(config.hidden_size, config.intermediate_size)
         self.dropout = nn.Dropout(p=act_dropout)
         self.linear2 = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.norm1 = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
-        self.norm2 = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.norm1 = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.dropout1 = nn.Dropout(p=dropout)
         self.dropout2 = nn.Dropout(p=dropout)
         if isinstance(config.hidden_act, str):
@@ -514,7 +517,7 @@ dropout.
         else:
             self.activation = config.hidden_act
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -575,12 +578,12 @@ dropout.
         return hidden_states
 
 
-class ErnieMEncoder(nn.Cell):
+class ErnieMEncoder(nn.Module):
 
     """ 
     ErnieMEncoder represents a multi-layer Transformer-based encoder model for processing sequences of input data. 
     
-    The ErnieMEncoder class inherits from nn.Cell and implements a multi-layer Transformer-based encoder, with the ability to return hidden states and attention weights if specified. The class provides methods
+    The ErnieMEncoder class inherits from nn.Module and implements a multi-layer Transformer-based encoder, with the ability to return hidden states and attention weights if specified. The class provides methods
 for initializing the model and processing input data through its layers.
     
     Attributes:
@@ -611,9 +614,9 @@ for initializing the model and processing input data through its layers.
         """
         super().__init__()
         self.config = config
-        self.layers = nn.CellList([ErnieMEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([ErnieMEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         input_embeds: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -674,13 +677,13 @@ for initializing the model and processing input data through its layers.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->ErnieM
-class ErnieMPooler(nn.Cell):
+class ErnieMPooler(nn.Module):
 
     """
     This class represents the MPooler module of the ERNIE model, which is responsible for pooling the hidden states to obtain a single representation of the input sequence.
     
     Inherits from:
-        nn.Cell
+        nn.Module
     
     Attributes:
         dense (nn.Dense): A fully connected layer that projects the input hidden states to a new hidden size.
@@ -710,7 +713,7 @@ class ErnieMPooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the pooled output tensor for the ERNIE model.
         
@@ -752,7 +755,7 @@ class ErnieMPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -833,7 +836,7 @@ The class inherits from ErnieMPreTrainedModel and extends its functionality to s
         for layer, heads in heads_to_prune.items():
             self.encoder.layers[layer].self_attn.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         position_ids: Optional[mindspore.Tensor] = None,
@@ -1007,7 +1010,7 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1125,7 +1128,7 @@ answering and computes the classification loss.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1245,7 +1248,7 @@ model. It takes various input tensors and returns the token classification outpu
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1345,7 +1348,7 @@ attributes.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1475,7 +1478,7 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1551,7 +1554,7 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
 
 class UIEM(ErnieMForInformationExtraction):
     """UIEM model"""
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Musicgen model."""
+""" MindSpore Musicgen model."""
 import copy
 import inspect
 import math
@@ -22,7 +22,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -91,7 +93,7 @@ def shift_tokens_right(input_ids: mindspore.Tensor, pad_token_id: int, decoder_s
     return shifted_input_ids
 
 
-class MusicgenSinusoidalPositionalEmbedding(nn.Cell):
+class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
     def __init__(self, num_positions: int, embedding_dim: int):
         """Initializes an instance of the MusicgenSinusoidalPositionalEmbedding class.
@@ -153,7 +155,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Cell):
             emb = ops.cat([emb, ops.zeros(num_embeddings, 1)], axis=1)
         return emb.to(get_default_dtype())
 
-    def construct(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
+    def forward(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
         """
         Constructs sinusoidal positional embeddings for music generation.
         
@@ -179,7 +181,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Musicgen
-class MusicgenAttention(nn.Cell):
+class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -227,10 +229,10 @@ class MusicgenAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -250,7 +252,7 @@ class MusicgenAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -370,13 +372,13 @@ class MusicgenAttention(nn.Cell):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class MusicgenDecoderLayer(nn.Cell):
+class MusicgenDecoderLayer(nn.Module):
 
     """
     MusicgenDecoderLayer represents a single layer of a music generation decoder model. 
     This class implements the decoding logic for generating music sequences based on the input hidden states and attention mechanisms.
     
-    The `MusicgenDecoderLayer` class inherits from `nn.Cell` and contains methods for initializing the layer and processing input tensors through the decoding pipeline. 
+    The `MusicgenDecoderLayer` class inherits from `nn.Module` and contains methods for initializing the layer and processing input tensors through the decoding pipeline. 
     The layer consists of self-attention mechanisms, feedforward neural networks, and layer normalization operations.
     
     The `__init__` method initializes the decoder layer with configuration parameters such as hidden size, number of attention heads, dropout probabilities, activation functions, and layer normalization.
@@ -430,12 +432,12 @@ class MusicgenDecoderLayer(nn.Cell):
             bias=False,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Dense(self.embed_dim, config.ffn_dim, has_bias=False)
-        self.fc2 = nn.Dense(config.ffn_dim, self.embed_dim, has_bias=False)
+        self.fc1 = nn.Dense(self.embed_dim, config.ffn_dim, bias=False)
+        self.fc2 = nn.Dense(config.ffn_dim, self.embed_dim, bias=False)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer.forward
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -572,7 +574,7 @@ and LayerNorm.
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(std),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -619,7 +621,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         embed_dim = config.vocab_size + 1
-        self.embed_tokens = nn.CellList(
+        self.embed_tokens = nn.ModuleList(
             [nn.Embedding(embed_dim, config.hidden_size) for _ in range(config.num_codebooks)]
         )
 
@@ -628,7 +630,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             config.hidden_size,
         )
 
-        self.layers = nn.CellList([MusicgenDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MusicgenDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
@@ -666,7 +668,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -940,7 +942,7 @@ config object and assigns it to the 'decoder' attribute of the MusicgenModel ins
         """
         return self.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1063,8 +1065,8 @@ generation configuration.
         self.model = MusicgenModel(config)
 
         self.num_codebooks = config.num_codebooks
-        self.lm_heads = nn.CellList(
-            [nn.Dense(config.hidden_size, config.vocab_size, has_bias=False) for _ in range(config.num_codebooks)]
+        self.lm_heads = nn.ModuleList(
+            [nn.Dense(config.hidden_size, config.vocab_size, bias=False) for _ in range(config.num_codebooks)]
         )
 
         # Initialize weights and apply final processing
@@ -1171,7 +1173,7 @@ representations that can be processed by the model.
         """
         return self.model.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2154,7 +2156,7 @@ decoding encoded data into a readable format.
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

@@ -21,7 +21,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from ....modules.functional import finfo
@@ -97,7 +99,7 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
 
-    def construct(self, input_ids_shape, past_key_values_length: int = 0):
+    def forward(self, input_ids_shape, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = ops.arange(
@@ -107,7 +109,7 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
 
 
 # Copied from transformers.models.longformer.modeling_longformer.LongformerSelfAttention with Longformer->LEDEncoder
-class LEDEncoderSelfAttention(nn.Cell):
+class LEDEncoderSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
@@ -143,7 +145,7 @@ class LEDEncoderSelfAttention(nn.Cell):
 
         self.config = config
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -740,13 +742,13 @@ class LEDEncoderSelfAttention(nn.Cell):
         return global_attn_output, global_attn_probs
 
 
-class LEDEncoderAttention(nn.Cell):
+class LEDEncoderAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
         self.longformer_self_attn = LEDEncoderSelfAttention(config, layer_id=layer_id)
         self.output = nn.Dense(config.d_model, config.d_model)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -774,7 +776,7 @@ class LEDEncoderAttention(nn.Cell):
         return outputs
 
 
-class LEDDecoderAttention(nn.Cell):
+class LEDDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -798,15 +800,15 @@ class LEDDecoderAttention(nn.Cell):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -917,7 +919,7 @@ class LEDDecoderAttention(nn.Cell):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class LEDEncoderLayer(nn.Cell):
+class LEDEncoderLayer(nn.Module):
     def __init__(self, config: LEDConfig, layer_id: int):
         super().__init__()
         self.embed_dim = config.d_model
@@ -930,7 +932,7 @@ class LEDEncoderLayer(nn.Cell):
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -979,7 +981,7 @@ class LEDEncoderLayer(nn.Cell):
         return (hidden_states,) + attn_outputs[1:]
 
 
-class LEDDecoderLayer(nn.Cell):
+class LEDDecoderLayer(nn.Module):
     def __init__(self, config: LEDConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1006,7 +1008,7 @@ class LEDDecoderLayer(nn.Cell):
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1095,7 +1097,7 @@ class LEDDecoderLayer(nn.Cell):
         return outputs
 
 
-class LEDClassificationHead(nn.Cell):
+class LEDClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(
@@ -1110,7 +1112,7 @@ class LEDClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=pooler_dropout)
         self.out_proj = nn.Dense(inner_dim, num_classes)
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = ops.tanh(hidden_states)
@@ -1131,7 +1133,7 @@ class LEDPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(std), cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -1471,8 +1473,8 @@ LED_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. See the superclass documentation for the generic methods the library
     implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads etc.)
 
-    This model is also a PyTorch [torch.nn.Cell](https://pytorch.org/docs/stable/nn.html#torch.nn.Cell) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for general usage and behavior.
+    This model is also a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular MindSpore Module and refer to the MindSpore documentation for general usage and behavior.
 
     Parameters:
         config ([`LEDConfig`]):
@@ -1664,7 +1666,7 @@ class LEDEncoder(LEDPreTrainedModel):
             self.max_source_positions,
             embed_dim,
         )
-        self.layers = nn.CellList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -1722,7 +1724,7 @@ class LEDEncoder(LEDPreTrainedModel):
 
         return padding_len, input_ids, attention_mask, inputs_embeds
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1933,14 +1935,14 @@ class LEDDecoder(LEDPreTrainedModel):
             self.max_target_positions,
             config.d_model,
         )
-        self.layers = nn.CellList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -2201,7 +2203,7 @@ class LEDModel(LEDPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2296,7 +2298,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         super().__init__(config)
         self.led = LEDModel(config)
         self.final_logits_bias = ops.zeros((1, self.led.shared.vocab_size))
-        self.lm_head = nn.Dense(config.d_model, self.led.shared.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, self.led.shared.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2327,7 +2329,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2488,7 +2490,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2598,7 +2600,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

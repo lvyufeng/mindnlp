@@ -25,7 +25,9 @@ from typing import Optional, Tuple, Union
 import numpy as np
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.nn import Dense as FalconLinear
 from mindspore.common.initializer import initializer, Normal
 
@@ -128,7 +130,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class FalconRotaryEmbedding(nn.Cell):
+class FalconRotaryEmbedding(nn.Module):
     """Implementation of RotaryEmbedding from GPT-NeoX.
     This implementation is designed to operate on queries and keys that are compatible with `[batch_size,
     n_heads_per_partition, seq_len, head_dim]` (e.g. MinGPTAttention format).
@@ -183,7 +185,7 @@ class FalconRotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos().astype(dtype)
         self.sin_cached = emb.sin().astype(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs the FalconRotaryEmbedding.
         
@@ -395,7 +397,7 @@ def dropout_add(
     return out
 
 
-class FalconAttention(nn.Cell):
+class FalconAttention(nn.Module):
     """
     FalconAttention is a module that implements the attention mechanism used in the Falcon model.
 
@@ -479,12 +481,12 @@ class FalconAttention(nn.Cell):
         else:
             qkv_out_dim = 3 * self.hidden_size
         self.query_key_value = FalconLinear(
-            self.hidden_size, qkv_out_dim, has_bias=config.bias
+            self.hidden_size, qkv_out_dim, bias=config.bias
         )
         self.new_decoder_architecture = config.new_decoder_architecture
         self.multi_query = config.multi_query
         self.dense = FalconLinear(
-            self.hidden_size, self.hidden_size, has_bias=config.bias
+            self.hidden_size, self.hidden_size, bias=config.bias
         )
         self.attention_dropout = nn.Dropout(p=config.attention_dropout)
         self.num_kv_heads = (
@@ -603,7 +605,7 @@ class FalconAttention(nn.Cell):
         # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
         return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         alibi: Optional[mindspore.Tensor],
@@ -770,7 +772,7 @@ class FalconAttention(nn.Cell):
         return output_tensor, present
 
 
-class FalconMLP(nn.Cell):
+class FalconMLP(nn.Module):
     """
     FalconMLP is a multi-layer perceptron (MLP) module for the Falcon model.
 
@@ -800,15 +802,15 @@ class FalconMLP(nn.Cell):
         hidden_size = config.hidden_size
 
         self.dense_h_to_4h = FalconLinear(
-            hidden_size, 4 * hidden_size, has_bias=config.bias
+            hidden_size, 4 * hidden_size, bias=config.bias
         )
         self.act = nn.GELU(approximate=False)
         self.dense_4h_to_h = FalconLinear(
-            4 * hidden_size, hidden_size, has_bias=config.bias
+            4 * hidden_size, hidden_size, bias=config.bias
         )
         self.hidden_dropout = config.hidden_dropout
 
-    def construct(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, x: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the FalconMLP by performing forward propagation on the input tensor 'x'.
         
@@ -827,7 +829,7 @@ class FalconMLP(nn.Cell):
         return x
 
 
-class FalconDecoderLayer(nn.Cell):
+class FalconDecoderLayer(nn.Module):
     """
     FalconDecoderLayer is a class that represents a single layer of the Falcon decoder model.
 
@@ -881,20 +883,20 @@ class FalconDecoderLayer(nn.Cell):
         if config.new_decoder_architecture:
             # The layer norm before self-attention
             self.ln_attn = nn.LayerNorm(
-                [hidden_size], epsilon=config.layer_norm_epsilon
+                [hidden_size], eps=config.layer_norm_epsilon
             )
             # The layer norm before the MLP
-            self.ln_mlp = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+            self.ln_mlp = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
         else:
             self.input_layernorm = nn.LayerNorm(
-                [hidden_size], epsilon=config.layer_norm_epsilon
+                [hidden_size], eps=config.layer_norm_epsilon
             )
             if not config.parallel_attn:
                 self.post_attention_layernorm = nn.LayerNorm(
-                    [hidden_size], epsilon=config.layer_norm_epsilon
+                    [hidden_size], eps=config.layer_norm_epsilon
                 )
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         alibi: Optional[mindspore.Tensor],
@@ -1000,7 +1002,7 @@ class FalconPreTrainedModel(PreTrainedModel):
                     cell.weight.dtype,
                 )
             )
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(
                     initializer("zeros", cell.bias.shape, cell.bias.dtype)
                 )
@@ -1031,7 +1033,7 @@ class FalconModel(FalconPreTrainedModel):
         num_heads (int): The number of attention heads.
         use_alibi (bool): Whether to use alibi tensor.
         word_embeddings (nn.Embedding): The word embedding layer.
-        h (nn.CellList): The list of FalconDecoderLayer instances representing the transformer blocks.
+        h (nn.ModuleList): The list of FalconDecoderLayer instances representing the transformer blocks.
         ln_f (nn.LayerNorm): The final layer normalization.
         gradient_checkpointing (bool): Whether to use gradient checkpointing.
 
@@ -1075,12 +1077,12 @@ class FalconModel(FalconPreTrainedModel):
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
         # Transformer blocks
-        self.h = nn.CellList(
+        self.h = nn.ModuleList(
             [FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
 
         # Final Layer Norm
-        self.ln_f = nn.LayerNorm([self.embed_dim], epsilon=config.layer_norm_epsilon)
+        self.ln_f = nn.LayerNorm([self.embed_dim], eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1116,7 +1118,7 @@ class FalconModel(FalconPreTrainedModel):
         """
         self.word_embeddings = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[
@@ -1320,7 +1322,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         """
         super().__init__(config)
         self.transformer = FalconModel(config)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1428,7 +1430,7 @@ downstream tasks such as fine-tuning or feature extraction.
             "attention_mask": attention_mask,
         }
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[
@@ -1541,12 +1543,12 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = FalconModel(config)
-        self.score = nn.Dense(config.hidden_size, config.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, config.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[
@@ -1691,7 +1693,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[
@@ -1807,7 +1809,7 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

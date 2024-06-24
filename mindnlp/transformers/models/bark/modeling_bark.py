@@ -20,10 +20,11 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
 
-
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
 from mindnlp.utils import logging
 from mindnlp.modules.functional import finfo
 from ...generation.logits_process import (
@@ -91,12 +92,12 @@ sequence_length corresponds to the maximum sequence length in the batch.
     )
 
 
-class BarkSelfAttention(nn.Cell):
+class BarkSelfAttention(nn.Module):
 
     """
     Represents a self-attention mechanism for the Bark model.
     
-    This class inherits from nn.Cell and implements a self-attention mechanism for the Bark model. It includes methods for splitting and merging heads, performing attention calculations, and constructing the
+    This class inherits from nn.Module and implements a self-attention mechanism for the Bark model. It includes methods for splitting and merging heads, performing attention calculations, and constructing the
 self-attention mechanism.
     
     Attributes:
@@ -155,9 +156,9 @@ parameters and returns the outputs.
             )
 
         # key, query, value projections for all heads, but in a batch
-        self.att_proj = nn.Dense(config.hidden_size, 3 * config.hidden_size, has_bias=config.bias)
+        self.att_proj = nn.Dense(config.hidden_size, 3 * config.hidden_size, bias=config.bias)
         # output projection
-        self.out_proj = nn.Dense(config.hidden_size, config.hidden_size, has_bias=config.bias)
+        self.out_proj = nn.Dense(config.hidden_size, config.hidden_size, bias=config.bias)
 
         self.is_causal = is_causal
         if is_causal:
@@ -234,7 +235,7 @@ parameters and returns the outputs.
 
         return attn_output, attn_weights
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -299,8 +300,8 @@ BARK_ATTENTION_CLASSES = {
 }
 
 
-class BarkLayerNorm(nn.Cell):
-    """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
+class BarkLayerNorm(nn.Module):
+    """LayerNorm but with an optional bias. MindSpore doesn't support simply bias=False."""
     def __init__(self, hidden_size, bias=True):
         """
         The __init__ method initializes an instance of the BarkLayerNorm class.
@@ -322,7 +323,7 @@ class BarkLayerNorm(nn.Cell):
         self.layer_norm = ops.LayerNorm(begin_norm_axis=-1,
                                         begin_params_axis=-1,
                                         epsilon=1e-5)
-    def construct(self, inputs):
+    def forward(self, inputs):
         """
         Constructs a normalized layer in the BarkLayerNorm class.
         
@@ -344,7 +345,7 @@ and shifting them using learned parameters. The normalized inputs are returned a
         y, _, _ = self.layer_norm(inputs, self.weight, self.bias)
         return y
 
-class BarkMLP(nn.Cell):
+class BarkMLP(nn.Module):
 
     """
     BarkMLP represents a multi-layer perceptron (MLP) neural network architecture implemented in MindSpore, utilizing dense layers, dropout, and GELU activation function.
@@ -359,7 +360,7 @@ class BarkMLP(nn.Cell):
         construct(hidden_states): Constructs the forward pass of the MLP by sequentially passing the input through the input projection, GELU activation, output projection, and dropout layers.
     
     Note:
-        The 'BarkMLP' class inherits from 'nn.Cell' for compatibility with MindSpore neural network modules.
+        The 'BarkMLP' class inherits from 'nn.Module' for compatibility with MindSpore neural network modules.
     """
     def __init__(self, config):
         """
@@ -381,12 +382,12 @@ class BarkMLP(nn.Cell):
             - RuntimeError: If there are errors during the initialization process of the model components.
         """
         super().__init__()
-        self.in_proj = nn.Dense(config.hidden_size, 4 * config.hidden_size, has_bias=config.bias)
-        self.out_proj = nn.Dense(4 * config.hidden_size, config.hidden_size, has_bias=config.bias)
+        self.in_proj = nn.Dense(config.hidden_size, 4 * config.hidden_size, bias=config.bias)
+        self.out_proj = nn.Dense(4 * config.hidden_size, config.hidden_size, bias=config.bias)
         self.dropout = nn.Dropout(p=config.dropout)
-        self.gelu = nn.GELU(approximate=False)
+        self.gelu = nn.GELU(approximate='none')
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states by applying a series of transformations.
         
@@ -408,10 +409,10 @@ class BarkMLP(nn.Cell):
         return hidden_states
 
 
-class BarkBlock(nn.Cell):
+class BarkBlock(nn.Module):
 
     """
-    BarkBlock represents a building block for a neural network model, specifically designed for handling attention mechanisms and MLP layers. This class inherits from nn.Cell and consists of methods for
+    BarkBlock represents a building block for a neural network model, specifically designed for handling attention mechanisms and MLP layers. This class inherits from nn.Module and consists of methods for
 initializing the block and constructing the block's forward pass.
     
     Attributes:
@@ -462,7 +463,7 @@ and optional arguments.
 
         self.mlp = BarkMLP(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         past_key_values=None,
@@ -532,7 +533,7 @@ class BarkPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -602,11 +603,11 @@ output_hidden_states=None, return_dict=None)`: Constructs the model output based
 
         self.drop = nn.Dropout(p=config.dropout)
 
-        self.layers = nn.CellList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
 
         self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.output_vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.output_vocab_size, bias=False)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -722,7 +723,7 @@ input_embeds is not provided and use_cache is False.
             "attention_mask": attention_mask,
         }
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[mindspore.Tensor]] = None,
@@ -1315,13 +1316,13 @@ class BarkFineModel(BarkPreTrainedModel):
         _resize_token_embeddings(new_num_tokens: int, pad_to_multiple_of: int) -> nn.Embedding:
             Helper method to resize the token embeddings matrix.
     
-        get_input_embeddings() -> nn.CellList:
+        get_input_embeddings() -> nn.ModuleList:
             Returns the input embeddings layers.
     
         set_input_embeddings(new_embeddings):
             Sets new input embeddings layers.
     
-        get_output_embeddings() -> nn.CellList:
+        get_output_embeddings() -> nn.ModuleList:
             Returns the output embeddings layers.
     
         set_output_embeddings(new_output_embeddings):
@@ -1366,20 +1367,20 @@ class BarkFineModel(BarkPreTrainedModel):
 
         # initialize a modified non causal GPT-like model
         # note that for there is one embedding layer and one lm_head for each codebook of Encodec
-        self.input_embeds_layers = nn.CellList(
+        self.input_embeds_layers = nn.ModuleList(
             [nn.Embedding(config.input_vocab_size, config.hidden_size) for _ in range(config.n_codes_total)]
         )
         self.position_embeds_layer = nn.Embedding(config.block_size, config.hidden_size)
 
         self.drop = nn.Dropout(p=config.dropout)
 
-        self.layers = nn.CellList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
-        self.lm_heads = nn.CellList(
+        self.lm_heads = nn.ModuleList(
             [
-                nn.Dense(config.hidden_size, config.output_vocab_size, has_bias=False)
+                nn.Dense(config.hidden_size, config.output_vocab_size, bias=False)
                 for _ in range(config.n_codes_given, config.n_codes_total)
             ]
         )
@@ -1476,7 +1477,7 @@ class BarkFineModel(BarkPreTrainedModel):
             ValueError: If pad_to_multiple_of is less than or equal to 0.
         """
         old_embeddings_list = self.get_input_embeddings()
-        new_embeddings_list = nn.CellList(
+        new_embeddings_list = nn.ModuleList(
             [
                 self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
                 for old_embeddings in old_embeddings_list
@@ -1488,7 +1489,7 @@ class BarkFineModel(BarkPreTrainedModel):
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
-            new_lm_head_list = nn.CellList(
+            new_lm_head_list = nn.ModuleList(
                 [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
             )
             self.set_output_embeddings(new_lm_head_list)
@@ -1548,11 +1549,11 @@ class BarkFineModel(BarkPreTrainedModel):
                 self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
                 self._tied_weights_keys.append(f"lm_heads.{i}.weight")
 
-        for module in self.cells():
+        for module in self.modules():
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
-    def construct(
+    def forward(
         self,
         codebook_idx: int,  # an additionnal idx corresponding to the id of the codebook that will be predicted
         input_ids: Optional[mindspore.Tensor] = None,
@@ -1797,7 +1798,7 @@ class BarkFineModel(BarkPreTrainedModel):
             rel_start_fill_idx = start_fill_idx - start_idx
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
-                logits = self.construct(n_inner, input_buffer).logits
+                logits = self.forward(n_inner, input_buffer).logits
                 if temperature is None or temperature == 1.0:
                     relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = ops.argmax(relevant_logits, -1)

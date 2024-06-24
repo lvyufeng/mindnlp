@@ -19,7 +19,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from mindnlp.modules.functional import normalize
@@ -108,15 +110,15 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     attentions: Optional[Tuple[mindspore.Tensor]] = None
 
 
-class BridgeTowerResidualAttention(nn.Cell):
+class BridgeTowerResidualAttention(nn.Module):
 
     """
-    This class represents a bridge tower residual attention module in a neural network model. It is a subclass of nn.Cell and is used to perform attention calculations on input hidden states.
+    This class represents a bridge tower residual attention module in a neural network model. It is a subclass of nn.Module and is used to perform attention calculations on input hidden states.
     
     Attributes:
         attn (nn.MultiheadAttention): A multi-head attention module that performs attention calculations on hidden states.
         ln_1 (nn.LayerNorm): A layer normalization module that normalizes the hidden states after the attention calculation.
-        mlp (nn.CellDict): A dictionary containing the modules for the multi-layer perceptron (MLP) used in the attention module.
+        mlp (nn.ModuleDict): A dictionary containing the modules for the multi-layer perceptron (MLP) used in the attention module.
         ln_2 (nn.LayerNorm): A layer normalization module that normalizes the hidden states after the MLP operations.
         attn_mask (None or mindspore.Tensor): A tensor that represents the attention mask used during the attention calculation.
     
@@ -166,8 +168,9 @@ class BridgeTowerResidualAttention(nn.Cell):
         super().__init__()
 
         self.attn = nn.MultiheadAttention(config.hidden_size, config.hidden_size // 64)
-        self.ln_1 = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
-        self.mlp = nn.CellDict(
+        self.ln_1 = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
+        self.mlp = nn.ModuleDict(
             OrderedDict(
                 [
                     ("c_fc", nn.Dense(config.hidden_size, config.hidden_size * 4)),
@@ -176,7 +179,8 @@ class BridgeTowerResidualAttention(nn.Cell):
                 ]
             )
         )
-        self.ln_2 = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.ln_2 = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.attn_mask = None
 
     def attention(self, hidden_state: mindspore.Tensor, attention_mask: mindspore.Tensor):
@@ -211,7 +215,7 @@ class BridgeTowerResidualAttention(nn.Cell):
             key_padding_mask=attention_mask,
         )[0]
 
-    def construct(self, hidden_state: mindspore.Tensor, attention_mask: mindspore.Tensor = None):
+    def forward(self, hidden_state: mindspore.Tensor, attention_mask: mindspore.Tensor = None):
         """
         Method to construct the output of the BridgeTowerResidualAttention model.
         
@@ -234,17 +238,17 @@ class BridgeTowerResidualAttention(nn.Cell):
         return hidden_state
 
 
-class BridgeTowerTransformer(nn.Cell):
+class BridgeTowerTransformer(nn.Module):
 
     """
     A class representing a BridgeTowerTransformer, a type of transformer model with customizable hidden layers and attention mechanisms.
     
-    This class inherits from nn.Cell and can be used to construct a transformer model with BridgeTowerResidualAttention blocks.
+    This class inherits from nn.Module and can be used to construct a transformer model with BridgeTowerResidualAttention blocks.
     
     Attributes:
         hidden_size (int): The size of the hidden layers in the transformer.
         num_hidden_layers (int): The number of hidden layers in the transformer.
-        resblocks (nn.CellList): A list of BridgeTowerResidualAttention blocks used in the transformer.
+        resblocks (nn.ModuleList): A list of BridgeTowerResidualAttention blocks used in the transformer.
         stop_gradient (bool): A flag indicating whether to use stop gradient during training.
     
     Methods:
@@ -279,16 +283,16 @@ class BridgeTowerTransformer(nn.Cell):
         self.hidden_size = config.hidden_size
         self.num_hidden_layers = config.num_hidden_layers
         if config.remove_last_layer:
-            self.resblocks = nn.CellList(
+            self.resblocks = nn.ModuleList(
                 [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)]
             )
         else:
-            self.resblocks = nn.CellList(
+            self.resblocks = nn.ModuleList(
                 [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)]
             )
         self.stop_gradient = config.stop_gradient
 
-    def construct(self, hidden_state: mindspore.Tensor, attention_mask: Optional[mindspore.Tensor] = None):
+    def forward(self, hidden_state: mindspore.Tensor, attention_mask: Optional[mindspore.Tensor] = None):
         """
         Constructs the BridgeTowerTransformer model.
         
@@ -314,12 +318,12 @@ class BridgeTowerTransformer(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->BridgeTower
-class BridgeTowerVisionEmbeddings(nn.Cell):
+class BridgeTowerVisionEmbeddings(nn.Module):
 
     """
     BridgeTowerVisionEmbeddings class represents a module for generating embeddings for vision tasks using the BridgeTower architecture.
     
-    This class inherits from nn.Cell and is responsible for constructing embeddings for input pixel values based on the provided configuration.
+    This class inherits from nn.Module and is responsible for constructing embeddings for input pixel values based on the provided configuration.
     
     Attributes:
         - config (BridgeTowerVisionConfig): The configuration object containing parameters for the vision model.
@@ -371,7 +375,7 @@ class BridgeTowerVisionEmbeddings(nn.Cell):
             out_channels=self.embed_dim,
             kernel_size=self.patch_size,
             stride=self.patch_size,
-            has_bias=False,
+            bias=False,
             pad_mode='valid'
         )
 
@@ -380,7 +384,7 @@ class BridgeTowerVisionEmbeddings(nn.Cell):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.position_ids = ops.arange(self.num_positions).expand((1, -1))
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         construct method in the BridgeTowerVisionEmbeddings class.
         
@@ -407,10 +411,10 @@ class BridgeTowerVisionEmbeddings(nn.Cell):
         return embeddings
 
 
-class BridgeTowerVisionTransformer(nn.Cell):
+class BridgeTowerVisionTransformer(nn.Module):
 
     """
-    This class represents a Vision Transformer for processing pixel values in the context of BridgeTower vision tasks. It inherits from the nn.Cell class.
+    This class represents a Vision Transformer for processing pixel values in the context of BridgeTower vision tasks. It inherits from the nn.Module class.
     
     Attributes:
         embeddings (BridgeTowerVisionEmbeddings): An instance of the BridgeTowerVisionEmbeddings class, responsible for converting pixel values into embedded representations.
@@ -418,7 +422,7 @@ class BridgeTowerVisionTransformer(nn.Cell):
         transformer (BridgeTowerTransformer): An instance of the BridgeTowerTransformer class, responsible for performing the transformer operations on the hidden states.
         ln_post (nn.LayerNorm): A LayerNorm module that normalizes the hidden states after the transformer layers.
         share_layernorm (bool): A flag indicating whether to share the LayerNorm module across transformer layers.
-        ln_separate (nn.CellList): A list of LayerNorm modules for separate normalization of hidden states in each transformer layer.
+        ln_separate (nn.ModuleList): A list of LayerNorm modules for separate normalization of hidden states in each transformer layer.
     
     Methods:
         construct(pixel_values: mindspore.Tensor, attention_mask): 
@@ -469,16 +473,19 @@ representations.
         super().__init__()
 
         self.embeddings = BridgeTowerVisionEmbeddings(config)
-        self.ln_pre = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.ln_pre = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.transformer = BridgeTowerTransformer(config)
-        self.ln_post = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.ln_post = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.share_layernorm = config.share_layernorm
         if not config.share_layernorm:
-            self.ln_separate = nn.CellList(
-                [nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
+            self.ln_separate = nn.ModuleList(
+                [nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
-    def construct(self, pixel_values: mindspore.Tensor, attention_mask):
+    def forward(self, pixel_values: mindspore.Tensor, attention_mask):
         """
         Constructs the BridgeTowerVisionTransformer.
         
@@ -519,7 +526,7 @@ representations.
             hidden_states = ops.stack(hidden_states_stack, axis=0)
         return hidden_states
 
-    def construct_pre(self, pixel_values: mindspore.Tensor):
+    def forward_pre(self, pixel_values: mindspore.Tensor):
         """
         Constructs the pre-processed hidden states for the BridgeTowerVisionTransformer model.
         
@@ -549,7 +556,7 @@ representations.
         hidden_states = hidden_states.permute(1, 0, 2)
         return hidden_states
 
-    def construct_post(self, hidden_state: mindspore.Tensor):
+    def forward_post(self, hidden_state: mindspore.Tensor):
         """
         Constructs the post-processed visual output based on the given hidden state.
         
@@ -569,10 +576,10 @@ representations.
         return visual_output_post
 
 
-class BridgeTowerLinkTower(nn.Cell):
+class BridgeTowerLinkTower(nn.Module):
 
     """
-    This class represents a BridgeTowerLinkTower, which is a component used in a neural network model for linking towers in a bridge tower architecture. It inherits from the nn.Cell class.
+    This class represents a BridgeTowerLinkTower, which is a component used in a neural network model for linking towers in a bridge tower architecture. It inherits from the nn.Module class.
     
     Attributes:
         link_tower_type (str): The type of link tower to be used. It can be one of ['add', 'scaled_add', 'interpolate'].
@@ -617,11 +624,12 @@ class BridgeTowerLinkTower(nn.Cell):
                 self.scaled_factor = Parameter(mindspore.tensor(1.0))
             elif config.link_tower_type == "interpolate":
                 self.beta = Parameter(mindspore.tensor(0.5))
-            self.LayerNorm = nn.LayerNorm(self.hidden_size, epsilon=config.layer_norm_eps)
+            self.LayerNorm = nn.LayerNorm(self.hidden_size, eps=
+config.layer_norm_eps)
         else:
             raise NotImplementedError(f"link_tower_type {config.link_tower_type} is not implemented")
 
-    def construct(self, hidden_states, cross_modal_hidden_states, attention_mask):
+    def forward(self, hidden_states, cross_modal_hidden_states, attention_mask):
         """
         Constructs a link tower for the BridgeTowerLinkTower class.
         
@@ -651,11 +659,11 @@ class BridgeTowerLinkTower(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BridgeTower
-class BridgeTowerSelfOutput(nn.Cell):
+class BridgeTowerSelfOutput(nn.Module):
 
     """
     The 'BridgeTowerSelfOutput' class represents a neural network cell for self-output in a bridge tower architecture. 
-    This class inherits from nn.Cell and contains methods for initializing the cell and constructing the self-output operation.
+    This class inherits from nn.Module and contains methods for initializing the cell and constructing the self-output operation.
     
     Attributes:
         dense (nn.Dense): A fully connected layer for transforming hidden states.
@@ -687,10 +695,11 @@ class BridgeTowerSelfOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output of the BridgeTowerSelfOutput layer.
         
@@ -720,10 +729,10 @@ class BridgeTowerSelfOutput(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BridgeTower
-class BridgeTowerIntermediate(nn.Cell):
+class BridgeTowerIntermediate(nn.Module):
 
     """
-    This class represents a bridge tower intermediate module, which is a part of a neural network model. It is a subclass of the nn.Cell class.
+    This class represents a bridge tower intermediate module, which is a part of a neural network model. It is a subclass of the nn.Module class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer used for linear transformation of the input tensor.
@@ -758,7 +767,7 @@ class BridgeTowerIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the intermediate hidden states in the BridgeTowerIntermediate class.
         
@@ -779,12 +788,12 @@ class BridgeTowerIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BridgeTower
-class BridgeTowerOutput(nn.Cell):
+class BridgeTowerOutput(nn.Module):
 
     """
     Represents the output layer of a bridge tower neural network model.
     
-    This class inherits from nn.Cell and implements the output layer operations including dense transformation, dropout, layer normalization, and residual connection.
+    This class inherits from nn.Module and implements the output layer operations including dense transformation, dropout, layer normalization, and residual connection.
     
     The BridgeTowerOutput class provides the construct method for applying the output layer operations to the input hidden states and input tensor, and returns the transformed hidden states.
     
@@ -814,10 +823,11 @@ class BridgeTowerOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the BridgeTowerOutput.
         
@@ -842,12 +852,12 @@ class BridgeTowerOutput(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BridgeTower
-class BridgeTowerPooler(nn.Cell):
+class BridgeTowerPooler(nn.Module):
 
     """
     The 'BridgeTowerPooler' class represents a pooler module for the Bridge Tower model in mindspore. It is responsible for computing the pooled output of the first token tensor of the input hidden states.
     
-    This class inherits from the 'nn.Cell' base class.
+    This class inherits from the 'nn.Module' base class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer used to transform the first token tensor.
@@ -890,7 +900,7 @@ class BridgeTowerPooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the pooled output tensor for the BridgeTowerPooler model.
         
@@ -920,10 +930,10 @@ class BridgeTowerPooler(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->BridgeTower
-class BridgeTowerSelfAttention(nn.Cell):
+class BridgeTowerSelfAttention(nn.Module):
 
     """
-    This class represents a self-attention mechanism used in the BridgeTower model. It is a subclass of nn.Cell.
+    This class represents a self-attention mechanism used in the BridgeTower model. It is a subclass of nn.Module.
     
     Attributes:
         num_attention_heads (int): The number of attention heads in the self-attention mechanism.
@@ -1019,7 +1029,7 @@ class BridgeTowerSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1143,10 +1153,10 @@ num_heads, sequence_length, encoder_sequence_length) if output_attentions is Tru
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower
-class BridgeTowerAttention(nn.Cell):
+class BridgeTowerAttention(nn.Module):
 
     """
-    This class represents the BridgeTowerAttention module, which is used for attention mechanism in the BridgeTower model. It is a subclass of the nn.Cell class.
+    This class represents the BridgeTowerAttention module, which is used for attention mechanism in the BridgeTower model. It is a subclass of the nn.Module class.
     
     Attributes:
         self (BridgeTowerSelfAttention): The self-attention layer of the BridgeTowerAttention module.
@@ -1238,7 +1248,7 @@ class BridgeTowerAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1282,10 +1292,10 @@ class BridgeTowerAttention(nn.Cell):
         return outputs
 
 
-class BridgeTowerBertCrossLayer(nn.Cell):
+class BridgeTowerBertCrossLayer(nn.Module):
 
     """
-    This Python class, 'BridgeTowerBertCrossLayer', represents a single layer in the BridgeTowerBert model. It is a subclass of nn.Cell and is responsible for performing cross-attention operations between
+    This Python class, 'BridgeTowerBertCrossLayer', represents a single layer in the BridgeTowerBert model. It is a subclass of nn.Module and is responsible for performing cross-attention operations between
 hidden states from the encoder and decoder.
     
     Attributes:
@@ -1331,7 +1341,7 @@ applies self-attention to the hidden states, followed by cross-attention if spec
         self.intermediate = BridgeTowerIntermediate(config)
         self.output = BridgeTowerOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         encoder_hidden_states,
@@ -1415,10 +1425,10 @@ applies self-attention to the hidden states, followed by cross-attention if spec
         return layer_output
 
 
-class BridgeTowerTextLayer(nn.Cell):
+class BridgeTowerTextLayer(nn.Module):
 
     """
-    This class represents a BridgeTowerTextLayer, which is a component of a neural network model. It inherits from the nn.Cell class.
+    This class represents a BridgeTowerTextLayer, which is a component of a neural network model. It inherits from the nn.Module class.
     
     Attributes:
     - chunk_size_feed_forward (int): The chunk size for the feed forward operation.
@@ -1472,7 +1482,7 @@ operations to the input hidden states.
         self.intermediate = BridgeTowerIntermediate(config)
         self.output = BridgeTowerOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1581,11 +1591,11 @@ operations to the input hidden states.
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->BridgeTowerText
-class BridgeTowerTextEncoder(nn.Cell):
+class BridgeTowerTextEncoder(nn.Module):
 
     """
     BridgeTowerTextEncoder represents a text encoder for a specific model, containing multiple layers for processing input text data. 
-    This class inherits from nn.Cell and is designed to construct the text encoder layers and handle various input parameters during the encoding process.
+    This class inherits from nn.Module and is designed to construct the text encoder layers and handle various input parameters during the encoding process.
     
     Attributes:
         config: A configuration object containing settings for the text encoder.
@@ -1668,10 +1678,10 @@ class BridgeTowerTextEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([BridgeTowerTextLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BridgeTowerTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1781,7 +1791,7 @@ class BridgeTowerTextEncoder(nn.Cell):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->BridgeTowerText
-class BridgeTowerTextEmbeddings(nn.Cell):
+class BridgeTowerTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -1815,7 +1825,8 @@ class BridgeTowerTextEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -1828,7 +1839,7 @@ class BridgeTowerTextEmbeddings(nn.Cell):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-    def construct(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         """
@@ -2025,7 +2036,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
         """
         return self.visual.embeddings.patch_embedding.weight.dtype
 
-    def construct(self, image, image_mask=None):
+    def forward(self, image, image_mask=None):
         """
         Constructs the BridgeTowerVisionModel by processing the input image and its corresponding mask.
         
@@ -2127,7 +2138,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.forward
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2321,10 +2332,10 @@ labels): Constructs the model for processing multimodal inputs and returns the m
             self.cross_modal_text_transform = nn.Dense(text_config.hidden_size, config.hidden_size)
             self.cross_modal_image_transform = nn.Dense(vision_config.hidden_size, config.hidden_size)
         else:
-            self.cross_modal_text_transform = nn.CellList(
+            self.cross_modal_text_transform = nn.ModuleList(
                 [nn.Dense(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
             )
-            self.cross_modal_image_transform = nn.CellList(
+            self.cross_modal_image_transform = nn.ModuleList(
                 [nn.Dense(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
             )
 
@@ -2339,10 +2350,10 @@ labels): Constructs the model for processing multimodal inputs and returns the m
                 ln.weight.data = self.vision_model.visual.ln_post.weight.data
                 ln.bias.data = self.vision_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.CellList(
+        self.cross_modal_image_layers = nn.ModuleList(
             [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
         )
-        self.cross_modal_text_layers = nn.CellList(
+        self.cross_modal_text_layers = nn.ModuleList(
             [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
         )
 
@@ -2351,17 +2362,19 @@ labels): Constructs the model for processing multimodal inputs and returns the m
         self.cross_modal_text_pooler = BridgeTowerPooler(config)
 
         # Initialize BridgeTower Components
-        self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
-        self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
+        self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
         if config.share_link_tower_layers:
             self.cross_modal_text_link_tower = BridgeTowerLinkTower(config)
             self.cross_modal_image_link_tower = BridgeTowerLinkTower(config)
         else:
-            self.cross_modal_text_link_tower = nn.CellList(
+            self.cross_modal_text_link_tower = nn.ModuleList(
                 [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
-            self.cross_modal_image_link_tower = nn.CellList(
+            self.cross_modal_image_link_tower = nn.ModuleList(
                 [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
 
@@ -2404,7 +2417,7 @@ raise an exception.
         """
         self.text_model.set_input_embeddings(value)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2644,11 +2657,11 @@ raise an exception.
 
 
 # Copied from transformers.models.vilt.modeling_vilt.ViltPredictionHeadTransform with Vilt->BridgeTower
-class BridgeTowerPredictionHeadTransform(nn.Cell):
+class BridgeTowerPredictionHeadTransform(nn.Module):
 
     """
     Represents a transformation head for a bridge tower prediction task. 
-    This class inherits from nn.Cell.
+    This class inherits from nn.Module.
     
     Attributes:
         dense (nn.Dense): A dense layer for transforming input hidden states.
@@ -2683,9 +2696,10 @@ class BridgeTowerPredictionHeadTransform(nn.Cell):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Class: BridgeTowerPredictionHeadTransform
         
@@ -2710,10 +2724,10 @@ class BridgeTowerPredictionHeadTransform(nn.Cell):
         return hidden_states
 
 
-class BridgeTowerMLMHead(nn.Cell):
+class BridgeTowerMLMHead(nn.Module):
 
     """
-    BridgeTowerMLMHead represents the Masked Language Model (MLM) head for the BridgeTower model. This class inherits from nn.Cell and implements the MLM head for generating predictions using the provided
+    BridgeTowerMLMHead represents the Masked Language Model (MLM) head for the BridgeTower model. This class inherits from nn.Module and implements the MLM head for generating predictions using the provided
 configuration and optional weight.
     
     Attributes:
@@ -2746,12 +2760,12 @@ configuration and optional weight.
         super().__init__()
         self.config = config
         self.transform = BridgeTowerPredictionHeadTransform(config)
-        self.decoder = nn.Dense(config.hidden_size, config.text_config.vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.hidden_size, config.text_config.vocab_size, bias=False)
         self.bias = Parameter(ops.zeros(config.text_config.vocab_size))
         if weight is not None:
             self.decoder.weight = weight
 
-    def construct(self, x):
+    def forward(self, x):
         """
         This method constructs the MLM score for the BridgeTowerMLMHead class.
         
@@ -2770,10 +2784,10 @@ configuration and optional weight.
         return mlm_score
 
 
-class BridgeTowerITMHead(nn.Cell):
+class BridgeTowerITMHead(nn.Module):
 
     """
-    BridgeTowerITMHead is a class representing an ITM (Item-Transaction-Model) head for a Bridge Tower model. This class inherits from nn.Cell and contains methods for initializing the head with a specific
+    BridgeTowerITMHead is a class representing an ITM (Item-Transaction-Model) head for a Bridge Tower model. This class inherits from nn.Module and contains methods for initializing the head with a specific
 hidden size and constructing the ITM score based on the input data.
     
     Attributes:
@@ -2802,7 +2816,7 @@ hidden size and constructing the ITM score based on the input data.
         super().__init__()
         self.fc = nn.Dense(hidden_size, 2)
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Construct a ITM score based on the input data.
         
@@ -2901,7 +2915,7 @@ hidden state of the model.
         """
         self.mlm_score.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3031,7 +3045,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3110,11 +3124,11 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         )
 
 
-class BridgeTowerContrastiveHead(nn.Cell):
+class BridgeTowerContrastiveHead(nn.Module):
 
     """
     This class represents a BridgeTowerContrastiveHead module for neural network operations. 
-    It inherits from nn.Cell and provides functionality for handling contrastive head operations within a neural network. 
+    It inherits from nn.Module and provides functionality for handling contrastive head operations within a neural network. 
     
     Attributes:
         fc (nn.Dense): A fully connected layer for mapping input data from hidden_size to embed_size.
@@ -3141,7 +3155,7 @@ class BridgeTowerContrastiveHead(nn.Cell):
         super().__init__()
         self.fc = nn.Dense(hidden_size, embed_size)
 
-    def construct(self, x):
+    def forward(self, x):
         """Constructs the BridgeTowerContrastiveHead.
         
         This method constructs the BridgeTowerContrastiveHead by processing the input tensor 'x' through the fully connected layer 'fc'.
@@ -3200,7 +3214,7 @@ contrastive loss, logits, text embeddings, image embeddings, cross-modal embeddi
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

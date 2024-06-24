@@ -26,7 +26,6 @@ from mindspore import nn, ops, Parameter, Tensor
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
-from mindnlp.injection import LESS_MS_2_2
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...ms_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -515,8 +514,6 @@ mechanism by calculating attention scores and applying them to the input sequenc
         """
         super().__init__()
         self.self = MSErnieSelfAttention(config, position_embedding_type=position_embedding_type)
-        if LESS_MS_2_2:
-            self.self_attn = self.self
         self.output = MSErnieSelfOutput(config)
         self.pruned_heads = set()
 
@@ -580,26 +577,16 @@ mechanism by calculating attention scores and applying them to the input sequenc
         Raises:
         - No specific exceptions are raised by this method.
         """
-        if LESS_MS_2_2:
-            self_outputs = self.self_attn(
-                hidden_states,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
-            )
-        else:
-            self_outputs = self.self(
-                hidden_states,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
-            )
+
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
+        )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs

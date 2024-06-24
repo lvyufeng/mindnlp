@@ -12,13 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch XLM RoBERTa xl,xxl model."""
+"""MindSpore XLM RoBERTa xl,xxl model."""
 
 import math
 from typing import List, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Tensor, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 import numpy as np
 from mindnlp.utils import logging
@@ -45,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
 
-class XLMRobertaXLEmbeddings(nn.Cell):
+class XLMRobertaXLEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -93,7 +95,7 @@ class XLMRobertaXLEmbeddings(nn.Cell):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-    def construct(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         """
@@ -172,7 +174,7 @@ class XLMRobertaXLEmbeddings(nn.Cell):
         return position_ids.unsqueeze(0).broadcast_to(input_shape)
 
 
-class XLMRobertaXLSelfAttention(nn.Cell):
+class XLMRobertaXLSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -205,7 +207,7 @@ class XLMRobertaXLSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -325,23 +327,23 @@ class XLMRobertaXLSelfAttention(nn.Cell):
             outputs = outputs + (past_key_value,)
         return outputs
 
-class XLMRobertaXLSelfOutput(nn.Cell):
+class XLMRobertaXLSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-class XLMRobertaXLAttention(nn.Cell):
+class XLMRobertaXLAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self_attn_layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.self = XLMRobertaXLSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = XLMRobertaXLSelfOutput(config)
         self.pruned_heads = set()
@@ -364,7 +366,7 @@ class XLMRobertaXLAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -389,7 +391,7 @@ class XLMRobertaXLAttention(nn.Cell):
         return outputs
 
 
-class XLMRobertaXLIntermediate(nn.Cell):
+class XLMRobertaXLIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -398,24 +400,24 @@ class XLMRobertaXLIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-class XLMRobertaXLOutput(nn.Cell):
+class XLMRobertaXLOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
 
-    def construct(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-class XLMRobertaXLLayer(nn.Cell):
+class XLMRobertaXLLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -429,9 +431,9 @@ class XLMRobertaXLLayer(nn.Cell):
             self.crossattention = XLMRobertaXLAttention(config, position_embedding_type="absolute")
         self.intermediate = XLMRobertaXLIntermediate(config)
         self.output = XLMRobertaXLOutput(config)
-        self.LayerNorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -503,15 +505,15 @@ class XLMRobertaXLLayer(nn.Cell):
         return layer_output
 
 
-class XLMRobertaXLEncoder(nn.Cell):
+class XLMRobertaXLEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([XLMRobertaXLLayer(config) for _ in range(config.num_hidden_layers)])
-        self.LayerNorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer = nn.ModuleList([XLMRobertaXLLayer(config) for _ in range(config.num_hidden_layers)])
+        self.LayerNorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -588,13 +590,13 @@ class XLMRobertaXLEncoder(nn.Cell):
 
 
 
-class XLMRobertaXLPooler(nn.Cell):
+class XLMRobertaXLPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
@@ -667,7 +669,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -863,7 +865,7 @@ requirements.
         """
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1079,7 +1081,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1138,17 +1140,17 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
-class XLMRobertaXLLMHead(nn.Cell):
+class XLMRobertaXLLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
         self.decoder = nn.Dense(config.hidden_size, config.vocab_size)
         self.bias = Parameter(ops.zeros(config.vocab_size), 'bias')
         self.decoder.bias = self.bias
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         x = self.dense(features)
         x = ops.gelu(x)
         x = self.layer_norm(x)
@@ -1186,7 +1188,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
         # Initialize weights and apply final processing
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1281,7 +1283,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
         # Initialize weights and apply final processing
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -1382,7 +1384,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
         # Initialize weights and apply final processing
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1444,7 +1446,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->XLMRoberta
-class XLMRobertaXLClassificationHead(nn.Cell):
+class XLMRobertaXLClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
     def __init__(self, config):
         super().__init__()
@@ -1455,7 +1457,7 @@ class XLMRobertaXLClassificationHead(nn.Cell):
         self.dropout = nn.Dropout(p=classifier_dropout)
         self.out_proj = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
@@ -1491,7 +1493,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
         # Initialize weights and apply final processing
         self.init_weights()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

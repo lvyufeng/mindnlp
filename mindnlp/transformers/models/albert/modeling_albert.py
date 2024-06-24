@@ -21,10 +21,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import mindspore
-from mindspore import ops
 
-from mindnlp.core import nn, Tensor
+from mindnlp.core import nn, ops, Tensor, dtype, tensor
 from mindnlp.core.nn import Parameter
 from mindnlp.core.nn.init import initializer, Normal
 from mindnlp.utils import (
@@ -104,30 +102,30 @@ class AlbertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_ids = ops.arange(config.max_position_embeddings).broadcast_to((1, -1))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=mindspore.int64)
+        self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=dtype.int64)
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
         past_key_values_length: int = 0,
-    ) -> mindspore.Tensor:
+    ) -> Tensor:
         """
         This method 'construct' is a part of the 'AlbertEmbeddings' class and is used to construct the embeddings for input tokens in the Albert model.
         
         Args:
             self: The instance of the class.
-            input_ids (Optional[mindspore.Tensor]): The input token IDs, representing the index of each token in the vocabulary. Default is None.
-            token_type_ids (Optional[mindspore.Tensor]): The token type IDs, representing the segment ID for each token (e.g., sentence A or B). Default is None.
-            position_ids (Optional[mindspore.Tensor]): The position IDs, representing the position of each token in the sequence. Default is None.
-            inputs_embeds (Optional[mindspore.Tensor]): The input embeddings directly provided instead of input_ids. Default is None.
+            input_ids (Optional[Tensor]): The input token IDs, representing the index of each token in the vocabulary. Default is None.
+            token_type_ids (Optional[Tensor]): The token type IDs, representing the segment ID for each token (e.g., sentence A or B). Default is None.
+            position_ids (Optional[Tensor]): The position IDs, representing the position of each token in the sequence. Default is None.
+            inputs_embeds (Optional[Tensor]): The input embeddings directly provided instead of input_ids. Default is None.
             past_key_values_length (int): The length of past key values. Default is 0.
         
         Returns:
-            mindspore.Tensor: The constructed embeddings for the input tokens.
+            Tensor: The constructed embeddings for the input tokens.
         
         Raises:
             ValueError: If the input shape and inputs_embeds shape are incompatible.
@@ -155,7 +153,7 @@ class AlbertEmbeddings(nn.Module):
                 buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((input_shape[0], seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = ops.zeros(input_shape, dtype=mindspore.int64)
+                token_type_ids = ops.zeros(input_shape, dtype=dtype.int64)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -181,11 +179,11 @@ class AlbertAttention(nn.Module):
     
     This class inherits from the nn.Module class and contains the following methods:
     - __init__(self, config: AlbertConfig): Initializes the AlbertAttention instance with the provided configuration.
-    - transpose_for_scores(self, x: mindspore.Tensor) -> mindspore.Tensor: Transposes the input tensor for calculating attention scores.
+    - transpose_for_scores(self, x: Tensor) -> Tensor: Transposes the input tensor for calculating attention scores.
     - prune_heads(self, heads: List[int]) -> None: Prunes specific attention heads from the model.
-    - construct(self, hidden_states: mindspore.Tensor, attention_mask: Optional[mindspore.Tensor] = None, 
-      head_mask: Optional[mindspore.Tensor] = None, output_attentions: bool = False) -> 
-      Union[Tuple[mindspore.Tensor], Tuple[mindspore.Tensor, mindspore.Tensor]]: Constructs the output based on the input 
+    - construct(self, hidden_states: Tensor, attention_mask: Optional[Tensor] = None, 
+      head_mask: Optional[Tensor] = None, output_attentions: bool = False) -> 
+      Union[Tuple[Tensor], Tuple[Tensor, Tensor]]: Constructs the output based on the input 
       hidden states, applying attention and head masks if provided.
     
     The AlbertAttention class is a crucial component in the ALBERT model architecture, responsible for capturing 
@@ -242,16 +240,16 @@ class AlbertAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.transpose_for_scores
-    def transpose_for_scores(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def transpose_for_scores(self, x: Tensor) -> Tensor:
         """
         Transpose the input tensor for calculating attention scores in the AlbertAttention class.
         
         Args:
             self (AlbertAttention): The instance of the AlbertAttention class.
-            x (mindspore.Tensor): The input tensor to be transposed. It should have a shape of (batch_size, sequence_length, hidden_size).
+            x (Tensor): The input tensor to be transposed. It should have a shape of (batch_size, sequence_length, hidden_size).
         
         Returns:
-            mindspore.Tensor: The transposed tensor with shape (batch_size, num_attention_heads, sequence_length, attention_head_size). The attention_head_size is calculated as hidden_size /
+            Tensor: The transposed tensor with shape (batch_size, num_attention_heads, sequence_length, attention_head_size). The attention_head_size is calculated as hidden_size /
 num_attention_heads.
         
         Raises:
@@ -292,34 +290,34 @@ num_attention_heads.
         self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
-        hidden_states: mindspore.Tensor,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
+        hidden_states: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[mindspore.Tensor], Tuple[mindspore.Tensor, mindspore.Tensor]]:
+    ) -> Union[Tuple[Tensor], Tuple[Tensor, Tensor]]:
         '''
         Constructs the attention mechanism for the Albert model.
         
         Args:
             self (AlbertAttention): An instance of the AlbertAttention class.
-            hidden_states (mindspore.Tensor): The input hidden states tensor of shape (batch_size, seq_length, hidden_size).
-            attention_mask (Optional[mindspore.Tensor]): The attention mask tensor of shape (batch_size, seq_length, seq_length). 
+            hidden_states (Tensor): The input hidden states tensor of shape (batch_size, seq_length, hidden_size).
+            attention_mask (Optional[Tensor]): The attention mask tensor of shape (batch_size, seq_length, seq_length). 
                 Defaults to None.
-            head_mask (Optional[mindspore.Tensor]): The head mask tensor of shape (num_attention_heads, seq_length, seq_length). 
+            head_mask (Optional[Tensor]): The head mask tensor of shape (num_attention_heads, seq_length, seq_length). 
                 Defaults to None.
             output_attentions (bool): Whether to output the attention probabilities. Defaults to False.
         
         Returns:
-            Union[Tuple[mindspore.Tensor], Tuple[mindspore.Tensor, mindspore.Tensor]]: 
+            Union[Tuple[Tensor], Tuple[Tensor, Tensor]]: 
                 If output_attentions is False, returns a tuple containing:
-                    - layernormed_context_layer (mindspore.Tensor): The output tensor after applying layer normalization 
+                    - layernormed_context_layer (Tensor): The output tensor after applying layer normalization 
                       of shape (batch_size, seq_length, hidden_size).
                 If output_attentions is True, returns a tuple containing:
-                    - layernormed_context_layer (mindspore.Tensor): The output tensor after applying layer normalization 
+                    - layernormed_context_layer (Tensor): The output tensor after applying layer normalization 
                       of shape (batch_size, seq_length, hidden_size).
-                    - attention_probs (mindspore.Tensor): The attention probabilities tensor of shape 
+                    - attention_probs (Tensor): The attention probabilities tensor of shape 
                       (batch_size, num_attention_heads, seq_length, seq_length).
         
         Raises:
@@ -334,7 +332,7 @@ num_attention_heads.
         value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = ops.matmul(query_layer, key_layer.swapaxes(-1, -2))
+        attention_scores = ops.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         if attention_mask is not None:
@@ -343,8 +341,8 @@ num_attention_heads.
 
         if self.position_embedding_type in ('relative_key', 'relative_key_query'):
             seq_length = hidden_states.shape[1]
-            position_ids_l = ops.arange(seq_length, dtype=mindspore.int64).view(-1, 1)
-            position_ids_r = ops.arange(seq_length, dtype=mindspore.int64).view(1, -1)
+            position_ids_l = ops.arange(seq_length, dtype=dtype.int64).view(-1, 1)
+            position_ids_r = ops.arange(seq_length, dtype=dtype.int64).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
@@ -358,7 +356,7 @@ num_attention_heads.
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         # Normalize the attention scores to probabilities.
-        attention_probs = ops.softmax(attention_scores, axis=-1)
+        attention_probs = ops.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -369,7 +367,7 @@ num_attention_heads.
             attention_probs = attention_probs * head_mask
 
         context_layer = ops.matmul(attention_probs, value_layer)
-        context_layer = context_layer.swapaxes(2, 1).flatten(start_dim=2)
+        context_layer = context_layer.transpose(2, 1).flatten(start_dim=2)
 
         projected_context_layer = self.dense(context_layer)
         projected_context_layer_dropout = self.output_dropout(projected_context_layer)
@@ -418,30 +416,30 @@ along with optional attention outputs.
         self.activation = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self,
-        hidden_states: mindspore.Tensor,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
+        hidden_states: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
+    ) -> Tuple[Tensor, Tensor]:
         ''' 
         Constructs an AlbertLayer.
         
         Args:
             self: The instance of the class.
-            hidden_states (mindspore.Tensor): The input hidden states. 
+            hidden_states (Tensor): The input hidden states. 
                 Tensor of shape (batch_size, seq_len, hidden_size).
-            attention_mask (Optional[mindspore.Tensor]): Mask for attention computation. 
+            attention_mask (Optional[Tensor]): Mask for attention computation. 
                 Tensor of shape (batch_size, seq_len).
-            head_mask (Optional[mindspore.Tensor]): Mask for attention computation. 
+            head_mask (Optional[Tensor]): Mask for attention computation. 
                 Tensor of shape (num_heads,) or (num_layers, num_heads).
             output_attentions (bool): Whether to output attentions.
             output_hidden_states (bool): Whether to output hidden states.
         
         Returns:
-            Tuple[mindspore.Tensor, mindspore.Tensor]: A tuple containing the updated hidden states 
+            Tuple[Tensor, Tensor]: A tuple containing the updated hidden states 
             and additional outputs based on the arguments.
         
         Raises:
@@ -461,18 +459,18 @@ along with optional attention outputs.
 
         return (hidden_states,) + attention_output[1:]  # add attentions if we output them
 
-    def ff_chunk(self, attention_output: mindspore.Tensor) -> mindspore.Tensor:
+    def ff_chunk(self, attention_output: Tensor) -> Tensor:
         """
         Performs a feedforward chunk operation on the input attention output tensor.
         
         Args:
             self: Instance of the AlbertLayer class.
-            attention_output (mindspore.Tensor): The input tensor representing the attention output.
+            attention_output (Tensor): The input tensor representing the attention output.
                 This tensor is expected to have the shape (batch_size, seq_length, hidden_size).
                 It serves as the input to the feedforward network.
         
         Returns:
-            mindspore.Tensor: The output tensor after applying the feedforward chunk operation.
+            Tensor: The output tensor after applying the feedforward chunk operation.
                 The shape of the returned tensor is expected to be (batch_size, seq_length, hidden_size).
         
         Raises:
@@ -496,9 +494,9 @@ class AlbertLayerGroup(nn.Module):
         __init__(self, config: AlbertConfig): 
             Initializes an instance of the AlbertLayerGroup class.
         
-        construct(self, hidden_states: mindspore.Tensor, attention_mask: Optional[mindspore.Tensor] = None, 
-                  head_mask: Optional[mindspore.Tensor] = None, output_attentions: bool = False, 
-                  output_hidden_states: bool = False) -> Tuple[Union[mindspore.Tensor, Tuple[mindspore.Tensor]], ...]:
+        construct(self, hidden_states: Tensor, attention_mask: Optional[Tensor] = None, 
+                  head_mask: Optional[Tensor] = None, output_attentions: bool = False, 
+                  output_hidden_states: bool = False) -> Tuple[Union[Tensor, Tuple[Tensor]], ...]:
             Constructs the AlbertLayerGroup by applying each AlbertLayer in the group to the input hidden_states.
             This method returns the resulting hidden states and optionally the layer attentions and hidden states.
     
@@ -526,27 +524,27 @@ parameter of the configuration object.
 
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
-    def construct(
+    def forward(
         self,
-        hidden_states: mindspore.Tensor,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
+        hidden_states: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Tuple[Union[mindspore.Tensor, Tuple[mindspore.Tensor]], ...]:
+    ) -> Tuple[Union[Tensor, Tuple[Tensor]], ...]:
         """
         Constructs an Albert Layer Group.
         
         Args:
             self: An instance of the AlbertLayerGroup class.
-            hidden_states (mindspore.Tensor): The input hidden states of shape (batch_size, sequence_length, hidden_size).
-            attention_mask (Optional[mindspore.Tensor]): The attention mask tensor of shape (batch_size, sequence_length).
-            head_mask (Optional[mindspore.Tensor]): The head mask tensor of shape (num_hidden_layers, num_attention_heads).
+            hidden_states (Tensor): The input hidden states of shape (batch_size, sequence_length, hidden_size).
+            attention_mask (Optional[Tensor]): The attention mask tensor of shape (batch_size, sequence_length).
+            head_mask (Optional[Tensor]): The head mask tensor of shape (num_hidden_layers, num_attention_heads).
             output_attentions (bool): Whether to return the attention weights. Default is False.
             output_hidden_states (bool): Whether to return the hidden states of all layers. Default is False.
         
         Returns:
-            Tuple[Union[mindspore.Tensor, Tuple[mindspore.Tensor]], ...]: A tuple containing the output hidden states of shape (batch_size, sequence_length, hidden_size).
+            Tuple[Union[Tensor, Tuple[Tensor]], ...]: A tuple containing the output hidden states of shape (batch_size, sequence_length, hidden_size).
                 If output_hidden_states is True, the tuple also contains the hidden states of all layers.
                 If output_attentions is True, the tuple also contains the attention weights of all layers.
         
@@ -591,9 +589,9 @@ class AlbertTransformer(nn.Module):
             Constructs the Albert transformer layers.
     
             Args:
-                hidden_states (mindspore.Tensor): The input hidden states.
-                attention_mask (Optional[mindspore.Tensor]): The attention mask tensor (default None).
-                head_mask (Optional[mindspore.Tensor]): The head mask tensor (default None).
+                hidden_states (Tensor): The input hidden states.
+                attention_mask (Optional[Tensor]): The attention mask tensor (default None).
+                head_mask (Optional[Tensor]): The head mask tensor (default None).
                 output_attentions (bool): Whether to output attentions (default False).
                 output_hidden_states (bool): Whether to output hidden states (default False).
                 return_dict (bool): Whether to return the output as a BaseModelOutput instance (default True).
@@ -623,11 +621,11 @@ class AlbertTransformer(nn.Module):
         self.embedding_hidden_mapping_in = nn.Dense(config.embedding_size, config.hidden_size)
         self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
-    def construct(
+    def forward(
         self,
-        hidden_states: mindspore.Tensor,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
+        hidden_states: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -637,9 +635,9 @@ class AlbertTransformer(nn.Module):
         
         Args:
             self: The instance of the class.
-            hidden_states (mindspore.Tensor): The input hidden states to be transformed.
-            attention_mask (Optional[mindspore.Tensor]): A tensor representing the attention mask, defaults to None.
-            head_mask (Optional[mindspore.Tensor]): A tensor representing the head mask, defaults to None.
+            hidden_states (Tensor): The input hidden states to be transformed.
+            attention_mask (Optional[Tensor]): A tensor representing the attention mask, defaults to None.
+            head_mask (Optional[Tensor]): A tensor representing the head mask, defaults to None.
             output_attentions (bool): A boolean indicating whether to output attentions, defaults to False.
             output_hidden_states (bool): A boolean indicating whether to output hidden states, defaults to False.
             return_dict (bool): A boolean indicating whether to return a dictionary, defaults to True.
@@ -720,31 +718,31 @@ class AlbertForPreTrainingOutput(ModelOutput):
     Output type of [`AlbertForPreTraining`].
 
     Args:
-        loss (*optional*, returned when `labels` is provided, `mindspore.Tensor` of shape `(1,)`):
+        loss (*optional*, returned when `labels` is provided, `Tensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (`mindspore.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        prediction_logits (`Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        sop_logits (`mindspore.Tensor` of shape `(batch_size, 2)`):
+        sop_logits (`Tensor` of shape `(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
-        hidden_states (`tuple(mindspore.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `mindspore.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+        hidden_states (`tuple(Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(mindspore.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `mindspore.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-    loss: Optional[mindspore.Tensor] = None
-    prediction_logits: mindspore.Tensor = None
-    sop_logits: mindspore.Tensor = None
-    hidden_states: Optional[Tuple[mindspore.Tensor]] = None
-    attentions: Optional[Tuple[mindspore.Tensor]] = None
+    loss: Optional[Tensor] = None
+    prediction_logits: Tensor = None
+    sop_logits: Tensor = None
+    hidden_states: Optional[Tuple[Tensor]] = None
+    attentions: Optional[Tuple[Tensor]] = None
 
 
 class AlbertModel(AlbertPreTrainedModel):
@@ -840,14 +838,14 @@ method is used to prune heads of the model, and the 'construct' method construct
             inner_group_idx = int(layer - group_idx * self.config.inner_group_num)
             self.encoder.albert_layer_groups[group_idx].albert_layers[inner_group_idx].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -857,12 +855,12 @@ method is used to prune heads of the model, and the 'construct' method construct
         
         Args:
             self (AlbertModel): The instance of the AlbertModel class.
-            input_ids (Optional[mindspore.Tensor]): The input tensor containing the IDs of the tokens. Default is None.
-            attention_mask (Optional[mindspore.Tensor]): The tensor specifying which tokens should be attended to. Default is None.
-            token_type_ids (Optional[mindspore.Tensor]): The tensor containing the type IDs of the tokens. Default is None.
-            position_ids (Optional[mindspore.Tensor]): The tensor containing the position IDs of the tokens. Default is None.
-            head_mask (Optional[mindspore.Tensor]): The tensor specifying which heads to mask in the attention layers. Default is None.
-            inputs_embeds (Optional[mindspore.Tensor]): The tensor containing the embedded representations of the input tokens. Default is None.
+            input_ids (Optional[Tensor]): The input tensor containing the IDs of the tokens. Default is None.
+            attention_mask (Optional[Tensor]): The tensor specifying which tokens should be attended to. Default is None.
+            token_type_ids (Optional[Tensor]): The tensor containing the type IDs of the tokens. Default is None.
+            position_ids (Optional[Tensor]): The tensor containing the position IDs of the tokens. Default is None.
+            head_mask (Optional[Tensor]): The tensor specifying which heads to mask in the attention layers. Default is None.
+            inputs_embeds (Optional[Tensor]): The tensor containing the embedded representations of the input tokens. Default is None.
             output_attentions (Optional[bool]): Whether to output the attentions. Default is None.
             output_hidden_states (Optional[bool]): Whether to output the hidden states. Default is None.
             return_dict (Optional[bool]): Whether to return a BaseModelOutputWithPooling object. Default is None.
@@ -900,12 +898,12 @@ method is used to prune heads of the model, and the 'construct' method construct
                 buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((batch_size, seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = ops.zeros(input_shape, dtype=mindspore.int64)
+                token_type_ids = ops.zeros(input_shape, dtype=dtype.int64)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * mindspore.tensor(np.finfo(mindspore.dtype_to_nptype(self.dtype)).min)
+        extended_attention_mask = (1.0 - extended_attention_mask) * ops.finfo(self.dtype).min
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
@@ -1027,26 +1025,26 @@ prediction head to compute the total loss for pre-training tasks.
         """
         return self.albert.embeddings.word_embeddings
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        labels: Optional[mindspore.Tensor] = None,
-        sentence_order_label: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        labels: Optional[Tensor] = None,
+        sentence_order_label: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
-        labels (`mindspore.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        sentence_order_label (`mindspore.Tensor` of shape `(batch_size,)`, *optional*):
+        sentence_order_label (`Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see `input_ids` docstring) Indices should be in `[0, 1]`. `0` indicates original order (sequence A, then
             sequence B), `1` indicates switched order (sequence B, then sequence A).
@@ -1062,7 +1060,7 @@ prediction head to compute the total loss for pre-training tasks.
         >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
         >>> model = AlbertForPreTraining.from_pretrained("albert-base-v2")
 
-        >>> input_ids = mindspore.Tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
+        >>> input_ids = Tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
         >>> # Batch size 1
         >>> outputs = model(input_ids)
 
@@ -1119,7 +1117,7 @@ class AlbertMLMHead(nn.Module):
        Initializes the AlbertMLMHead with the provided AlbertConfig settings. 
        Initializes the LayerNorm, bias, dense, decoder, activation, and ties the weights.
        
-    2. construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    2. construct(self, hidden_states: Tensor) -> Tensor:
        Constructs the prediction scores based on the input hidden_states tensor. 
        Applies the dense layer, activation function, LayerNorm, and decoder to generate the prediction scores.
     
@@ -1157,18 +1155,18 @@ class AlbertMLMHead(nn.Module):
         self.decoder.bias = self.bias
         assert id(self.decoder.bias == id(self.bias))
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: Tensor) -> Tensor:
         """
         This method constructs the Albert Masked Language Model (MLM) head.
         
         Args:
             self (AlbertMLMHead): An instance of the AlbertMLMHead class.
-            hidden_states (mindspore.Tensor): The input hidden states tensor to be processed. It represents the output
+            hidden_states (Tensor): The input hidden states tensor to be processed. It represents the output
                 of the previous layer and serves as input to the MLM head. It must be a tensor of shape compatible with
                 the internal operations of the method.
         
         Returns:
-            mindspore.Tensor: The prediction scores tensor generated by the MLM head. It represents the model's predictions
+            Tensor: The prediction scores tensor generated by the MLM head. It represents the model's predictions
                 for masked tokens based on the input hidden states.
         
         Raises:
@@ -1214,7 +1212,7 @@ class AlbertSOPHead(nn.Module):
         __init__(self, config: AlbertConfig): 
             Initializes the AlbertSOPHead instance.
             
-        construct(self, pooled_output: mindspore.Tensor) -> mindspore.Tensor:
+        construct(self, pooled_output: Tensor) -> Tensor:
             Constructs the logits for SOP classification based on the pooled_output tensor.
     
     Example:
@@ -1247,16 +1245,16 @@ class AlbertSOPHead(nn.Module):
         self.dropout = nn.Dropout(p=config.classifier_dropout_prob)
         self.classifier = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(self, pooled_output: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pooled_output: Tensor) -> Tensor:
         """
         This method constructs the AlbertSOPHead by applying dropout and classifier operations on the provided pooled_output.
         
         Args:
             self (object): The instance of the AlbertSOPHead class.
-            pooled_output (mindspore.Tensor): The pooled output tensor obtained from the previous layer. It serves as the input to the method.
+            pooled_output (Tensor): The pooled output tensor obtained from the previous layer. It serves as the input to the method.
         
         Returns:
-            mindspore.Tensor: The output tensor (logits) obtained after applying the dropout and classifier operations on the pooled_output. This tensor represents the final result of the AlbertSOPHead
+            Tensor: The output tensor (logits) obtained after applying the dropout and classifier operations on the pooled_output. This tensor represents the final result of the AlbertSOPHead
 construction process.
         
         Raises:
@@ -1352,21 +1350,21 @@ including the loss and prediction scores. The class is designed to be used in na
         """
         return self.albert.embeddings.word_embeddings
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        labels: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        labels: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, Tuple]:
         r"""
-        labels (`mindspore.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
@@ -1490,21 +1488,21 @@ The `config` parameter is an object of the `AlbertConfig` class, which holds the
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        labels: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        labels: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, Tuple]:
         r"""
-        labels (`mindspore.Tensor` of shape `(batch_size,)`, *optional*):
+        labels (`Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -1533,7 +1531,7 @@ The `config` parameter is an object of the `AlbertConfig` class, which holds the
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and labels.dtype in (mindspore.int64, mindspore.int32):
+                elif self.num_labels > 1 and labels.dtype in (dtype.int64, dtype.int32):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1574,10 +1572,10 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
     
     Methods:
         __init__(self, config: AlbertConfig): Initializes the AlbertForTokenClassification instance.
-        construct(self, input_ids: Optional[mindspore.Tensor] = None, attention_mask: Optional[mindspore.Tensor] = None, 
-                  token_type_ids: Optional[mindspore.Tensor] = None, position_ids: Optional[mindspore.Tensor] = None, 
-                  head_mask: Optional[mindspore.Tensor] = None, inputs_embeds: Optional[mindspore.Tensor] = None, 
-                  labels: Optional[mindspore.Tensor] = None, output_attentions: Optional[bool] = None, 
+        construct(self, input_ids: Optional[Tensor] = None, attention_mask: Optional[Tensor] = None, 
+                  token_type_ids: Optional[Tensor] = None, position_ids: Optional[Tensor] = None, 
+                  head_mask: Optional[Tensor] = None, inputs_embeds: Optional[Tensor] = None, 
+                  labels: Optional[Tensor] = None, output_attentions: Optional[bool] = None, 
                   output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None) -> 
                   Union[TokenClassifierOutput, Tuple]: Constructs the AlbertForTokenClassification model.
     
@@ -1632,21 +1630,21 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        labels: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        labels: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[TokenClassifierOutput, Tuple]:
         r"""
-        labels (`mindspore.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1728,26 +1726,26 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        start_positions: Optional[mindspore.Tensor] = None,
-        end_positions: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        start_positions: Optional[Tensor] = None,
+        end_positions: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
-        start_positions (`mindspore.Tensor` of shape `(batch_size,)`, *optional*):
+        start_positions (`Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
-        end_positions (`mindspore.Tensor` of shape `(batch_size,)`, *optional*):
+        end_positions (`Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
@@ -1768,7 +1766,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits: mindspore.Tensor = self.qa_outputs(sequence_output)
+        logits: Tensor = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
@@ -1812,8 +1810,8 @@ architecture.
     
     Methods:
     - __init__(self, config: AlbertConfig): Initializes the AlbertForMultipleChoice model with the given configuration.
-    - construct(self, input_ids: Optional[mindspore.Tensor] = None, attention_mask: Optional[mindspore.Tensor] = None, token_type_ids: Optional[mindspore.Tensor] = None, position_ids:
-Optional[mindspore.Tensor] = None, head_mask: Optional[mindspore.Tensor] = None, inputs_embeds: Optional[mindspore.Tensor] = None, labels: Optional[mindspore.Tensor] = None, output_attentions: Optional[bool] =
+    - construct(self, input_ids: Optional[Tensor] = None, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None, position_ids:
+Optional[Tensor] = None, head_mask: Optional[Tensor] = None, inputs_embeds: Optional[Tensor] = None, labels: Optional[Tensor] = None, output_attentions: Optional[bool] =
 None, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[AlbertForPreTrainingOutput, Tuple]: Constructs the AlbertForMultipleChoice model with the given input tensors and
 returns the output.
     
@@ -1852,21 +1850,21 @@ depending on the return_dict parameter.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
-        input_ids: Optional[mindspore.Tensor] = None,
-        attention_mask: Optional[mindspore.Tensor] = None,
-        token_type_ids: Optional[mindspore.Tensor] = None,
-        position_ids: Optional[mindspore.Tensor] = None,
-        head_mask: Optional[mindspore.Tensor] = None,
-        inputs_embeds: Optional[mindspore.Tensor] = None,
-        labels: Optional[mindspore.Tensor] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        position_ids: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        labels: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, Tuple]:
         r"""
-        labels (`mindspore.Tensor` of shape `(batch_size,)`, *optional*):
+        labels (`Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where *num_choices* is the size of the second dimension of the input tensors. (see
             *input_ids* above)
@@ -1898,7 +1896,7 @@ depending on the return_dict parameter.
         pooled_output = outputs[1]
 
         pooled_output = self.dropout(pooled_output)
-        logits: mindspore.Tensor = self.classifier(pooled_output)
+        logits: Tensor = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None

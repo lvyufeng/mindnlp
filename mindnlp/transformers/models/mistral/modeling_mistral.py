@@ -25,7 +25,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -69,11 +72,11 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mistral
-class MistralRMSNorm(nn.Cell):
+class MistralRMSNorm(nn.Module):
 
     """
     MistralRMSNorm is a normalization layer equivalent to T5LayerNorm, designed to normalize hidden states in deep learning models. 
-    It inherits from nn.Cell and provides methods for normalizing and scaling input hidden states based on the given parameters.
+    It inherits from nn.Module and provides methods for normalizing and scaling input hidden states based on the given parameters.
     
     Attributes:
         - hidden_size (int): The size of the hidden states.
@@ -103,7 +106,7 @@ class MistralRMSNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size), 'weight')
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the RMS normalization of the hidden states.
         
@@ -126,10 +129,10 @@ class MistralRMSNorm(nn.Cell):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mistral
-class MistralRotaryEmbedding(nn.Cell):
+class MistralRotaryEmbedding(nn.Module):
 
     """
-    The MistralRotaryEmbedding class represents a rotary positional embedding for sequences. It inherits from the nn.Cell class and provides methods for setting up the rotary embedding and constructing the
+    The MistralRotaryEmbedding class represents a rotary positional embedding for sequences. It inherits from the nn.Module class and provides methods for setting up the rotary embedding and constructing the
 embeddings for input sequences.
     
     Attributes:
@@ -198,7 +201,7 @@ embeddings for input sequences.
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs the MistralRotaryEmbedding.
         
@@ -260,12 +263,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class MistralMLP(nn.Cell):
+class MistralMLP(nn.Module):
 
     """
     MistralMLP
     
-    This class represents a multi-layer perceptron (MLP) model for Mistral, a deep learning framework. It inherits from the nn.Cell class and is designed for processing sequential data.
+    This class represents a multi-layer perceptron (MLP) model for Mistral, a deep learning framework. It inherits from the nn.Module class and is designed for processing sequential data.
     
     Attributes:
         config (object): The configuration object containing various parameters for the MLP.
@@ -308,12 +311,12 @@ class MistralMLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a new instance of the MistralMLP class.
         
@@ -343,7 +346,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class MistralAttention(nn.Cell):
+class MistralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -390,10 +393,10 @@ always provide a `layer_idx` when creating this class.
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=False)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = MistralRotaryEmbedding(
             self.head_dim,
@@ -420,7 +423,7 @@ always provide a `layer_idx` when creating this class.
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -520,14 +523,14 @@ always provide a `layer_idx` when creating this class.
         return attn_output, attn_weights, past_key_value
 
 
-class MistralDecoderLayer(nn.Cell):
+class MistralDecoderLayer(nn.Module):
 
     """
     MistralDecoderLayer represents a single layer of the Mistral decoder model. This class implements the logic for processing input hidden states through self-attention mechanism and multi-layer perceptron
 (MLP) in a decoder layer.
     
     Inherits From:
-        nn.Cell
+        nn.Module
     
     Attributes:
         hidden_size (int): The size of the hidden states.
@@ -586,7 +589,7 @@ output_attentions: Optional[bool] = False, use_cache: Optional[bool] = False, **
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -677,7 +680,7 @@ range specified by the 'initializer_range' attribute in the configuration. If th
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -720,7 +723,7 @@ class MistralModel(MistralPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [MistralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -765,7 +768,7 @@ class MistralModel(MistralPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -922,7 +925,7 @@ forward pass, while the prepare_inputs_for_generation method prepares inputs for
         super().__init__(config)
         self.model = MistralModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1030,7 +1033,7 @@ forward pass, while the prepare_inputs_for_generation method prepares inputs for
         '''
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1274,7 +1277,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MistralModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1319,7 +1322,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

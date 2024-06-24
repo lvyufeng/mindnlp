@@ -21,7 +21,9 @@ import math
 from typing import Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.transformers.generation import GenerationConfig
@@ -47,11 +49,11 @@ POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
-class Pop2PianoLayerNorm(nn.Cell):
+class Pop2PianoLayerNorm(nn.Module):
 
     """
     Pop2PianoLayerNorm class represents a layer normalization module in the Pop2Piano style, designed without bias and mean subtraction. 
-    This class inherits from nn.Cell and provides functionality for performing layer normalization on hidden states in a neural network.
+    This class inherits from nn.Module and provides functionality for performing layer normalization on hidden states in a neural network.
     The class includes methods for initialization and construction, applying the Pop2Piano style normalization to the input hidden states.
     The 'Pop2PianoLayerNorm' class is suitable for use in deep learning models requiring efficient and effective normalization techniques.
     """
@@ -63,7 +65,7 @@ class Pop2PianoLayerNorm(nn.Cell):
         self.weight = Parameter(initializer('zeros', (hidden_size,), mindspore.float32), 'weight')
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Method 'construct' in the class 'Pop2PianoLayerNorm'.
         
@@ -103,10 +105,10 @@ ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoDenseActDense(nn.Cell):
+class Pop2PianoDenseActDense(nn.Module):
 
     """
-    This class represents a Pop2PianoDenseActDense layer, which is used in neural network models. It inherits from the nn.Cell class.
+    This class represents a Pop2PianoDenseActDense layer, which is used in neural network models. It inherits from the nn.Module class.
     
     The Pop2PianoDenseActDense layer consists of two dense linear transformations (wi and wo), an activation function (act), and a dropout layer (dropout). The layer takes a tensor of hidden states as input
 and applies the following operations to the input:
@@ -146,12 +148,12 @@ layers.
             - ValueError: If the 'config' parameter does not contain valid configuration parameters.
         """
         super().__init__()
-        self.wi = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Dense(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the Pop2PianoDenseActDense object.
         
@@ -180,12 +182,12 @@ layers.
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->Pop2Piano
-class Pop2PianoDenseGatedActDense(nn.Cell):
+class Pop2PianoDenseGatedActDense(nn.Module):
 
     """
     This class represents a custom neural network module called Pop2PianoDenseGatedActDense that implements a dense gated activation function using Pop2PianoConfig parameters. 
     The module consists of dense layers with gated activation functions for neural network computations. 
-    It inherits from the nn.Cell class and provides methods for initializing and constructing the neural network layers.
+    It inherits from the nn.Module class and provides methods for initializing and constructing the neural network layers.
     The class contains methods for initializing network parameters and performing forward computations through the network layers.
     """
     def __init__(self, config: Pop2PianoConfig):
@@ -207,13 +209,13 @@ class Pop2PianoDenseGatedActDense(nn.Cell):
             - KeyError: If the activation function specified in the configuration is not supported.
         """
         super().__init__()
-        self.wi_0 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wi_1 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi_0 = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Dense(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Dense(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method 'construct' in the class 'Pop2PianoDenseGatedActDense' constructs hidden states based on the provided input hidden states.
         
@@ -251,10 +253,10 @@ class Pop2PianoDenseGatedActDense(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->Pop2Piano
-class Pop2PianoLayerFF(nn.Cell):
+class Pop2PianoLayerFF(nn.Module):
 
     """
-    This class represents a feed-forward layer used in the Pop2Piano model. It is inherited from the nn.Cell class.
+    This class represents a feed-forward layer used in the Pop2Piano model. It is inherited from the nn.Module class.
     
     Attributes:
         DenseReluDense (Pop2PianoDenseGatedActDense or Pop2PianoDenseActDense): A dense layer with gated activation function, if config.is_gated_act is True, otherwise a dense layer with regular activation
@@ -292,7 +294,7 @@ function.
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the forward pass of the Pop2PianoLayerFF model.
         
@@ -313,11 +315,11 @@ function.
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoAttention(nn.Cell):
+class Pop2PianoAttention(nn.Module):
 
     """
     This class represents a self-attention mechanism with optional relative attention bias for the Pop2Piano model. 
-    It inherits from nn.Cell and provides functionalities for attention computation and head pruning.
+    It inherits from nn.Module and provides functionalities for attention computation and head pruning.
     
     Attributes:
         - config: Pop2PianoConfig, the configuration for the attention mechanism
@@ -372,10 +374,10 @@ class Pop2PianoAttention(nn.Cell):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.k = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.v = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.o = nn.Dense(self.inner_dim, self.d_model, has_bias=False)
+        self.q = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.k = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.v = nn.Dense(self.d_model, self.inner_dim, bias=False)
+        self.o = nn.Dense(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -478,7 +480,7 @@ such as 'find_pruneable_heads_and_indices' and 'prune_linear_layer'.
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         mask=None,
@@ -609,11 +611,11 @@ such as 'find_pruneable_heads_and_indices' and 'prune_linear_layer'.
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoLayerSelfAttention(nn.Cell):
+class Pop2PianoLayerSelfAttention(nn.Module):
 
     """This class represents a self-attention mechanism used in the Pop2PianoLayer model.
     
-    The Pop2PianoLayerSelfAttention class is a subclass of the nn.Cell class in the PyTorch library. It is responsible for performing self-attention on the input hidden states.
+    The Pop2PianoLayerSelfAttention class is a subclass of the nn.Module class in the MindSpore library. It is responsible for performing self-attention on the input hidden states.
     
     Attributes:
         SelfAttention (Pop2PianoAttention): An instance of the Pop2PianoAttention class used for self-attention computation.
@@ -647,7 +649,7 @@ states.
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -694,11 +696,11 @@ states.
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoLayerCrossAttention(nn.Cell):
+class Pop2PianoLayerCrossAttention(nn.Module):
 
     """
     The Pop2PianoLayerCrossAttention class represents a layer that performs cross-attention within the Pop2Piano model architecture. 
-    This class inherits from nn.Cell and contains methods for initializing the layer and constructing the cross-attention mechanism.
+    This class inherits from nn.Module and contains methods for initializing the layer and constructing the cross-attention mechanism.
     
     Attributes:
         - EncDecAttention: Instance of Pop2PianoAttention for performing cross-attention.
@@ -737,7 +739,7 @@ class Pop2PianoLayerCrossAttention(nn.Cell):
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(p=config.dropout_rate)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         key_value_states,
@@ -790,14 +792,14 @@ class Pop2PianoLayerCrossAttention(nn.Cell):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
-class Pop2PianoBlock(nn.Cell):
+class Pop2PianoBlock(nn.Module):
 
     """
-    This class represents a block of the Pop2Piano model. It is a subclass of nn.Cell and contains layers for self-attention, cross-attention (if applicable), and feed-forward processing.
+    This class represents a block of the Pop2Piano model. It is a subclass of nn.Module and contains layers for self-attention, cross-attention (if applicable), and feed-forward processing.
     
     Attributes:
         - is_decoder (bool): Indicates whether the block is a decoder block or not.
-        - layer (nn.CellList): List of layers in the block, including self-attention, cross-attention, and feed-forward layers.
+        - layer (nn.ModuleList): List of layers in the block, including self-attention, cross-attention, and feed-forward layers.
     
     Methods:
         - __init__(self, config, has_relative_attention_bias=False): Initializes a new instance of the Pop2PianoBlock class.
@@ -823,14 +825,14 @@ cross_attn_layer_head_mask=None, past_key_value=None, use_cache=False, output_at
         """
         super().__init__()
         self.is_decoder = config.is_decoder
-        self.layer = nn.CellList()
+        self.layer = nn.ModuleList()
         self.layer.append(Pop2PianoLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
             self.layer.append(Pop2PianoLayerCrossAttention(config))
 
         self.layer.append(Pop2PianoLayerFF(config))
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1130,7 +1132,7 @@ options for hidden states and attentions.
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
-        self.block = nn.CellList(
+        self.block = nn.ModuleList(
             [Pop2PianoBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
         self.final_layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -1176,7 +1178,7 @@ options for hidden states and attentions.
         """
         self.embed_tokens = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1388,7 +1390,7 @@ options for hidden states and attentions.
         )
 
 
-class Pop2PianoConcatEmbeddingToMel(nn.Cell):
+class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """Embedding Matrix for `composer` tokens."""
     def __init__(self, config):
         """
@@ -1412,7 +1414,7 @@ class Pop2PianoConcatEmbeddingToMel(nn.Cell):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size=config.composer_vocab_size, embedding_size=config.d_model)
 
-    def construct(self, feature, index_value, embedding_offset):
+    def forward(self, feature, index_value, embedding_offset):
         """
         This method constructs inputs_embeds for Pop2PianoConcatEmbeddingToMel model.
         
@@ -1510,7 +1512,7 @@ composer name, generation config, and attention mask as inputs.
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = Pop2PianoStack(decoder_config, self.shared)
 
-        self.lm_head = nn.Dense(config.d_model, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1661,7 +1663,7 @@ composer name, generation config, and attention mask as inputs.
 
         return input_features, None
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

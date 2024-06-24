@@ -19,7 +19,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, TruncatedNormal
 
 from ...activations import ACT2FN
@@ -90,10 +92,10 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->Blip2
-class Blip2VisionEmbeddings(nn.Cell):
+class Blip2VisionEmbeddings(nn.Module):
 
     """
-    This class represents the embedding module for the Blip2Vision model. It inherits from the nn.Cell class.
+    This class represents the embedding module for the Blip2Vision model. It inherits from the nn.Module class.
     
     The Blip2VisionEmbeddings class initializes with a configuration object of type Blip2VisionConfig. It sets various attributes such as the embedding dimensions, image size, patch size, class embedding,
 patch embedding, number of patches, and position embedding.
@@ -141,7 +143,7 @@ patch embedding, number of patches, and position embedding.
 
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size,
-            has_bias=True, pad_mode='valid'
+            bias=True, pad_mode='valid'
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -149,7 +151,7 @@ patch embedding, number of patches, and position embedding.
 
         self.position_embedding = Parameter(ops.randn(1, self.num_positions, self.embed_dim))
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs Blip2Vision embeddings based on the given pixel values.
         
@@ -178,7 +180,7 @@ patch embedding, number of patches, and position embedding.
         return embeddings
 
 
-class Blip2Attention(nn.Cell):
+class Blip2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config):
         """
@@ -212,7 +214,7 @@ class Blip2Attention(nn.Cell):
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
         # small tweak here compared to CLIP, no bias here
-        self.qkv = nn.Dense(self.embed_dim, 3 * self.embed_dim, has_bias=False)
+        self.qkv = nn.Dense(self.embed_dim, 3 * self.embed_dim, bias=False)
 
         if config.qkv_bias:
             q_bias = Parameter(ops.zeros(self.embed_dim))
@@ -245,7 +247,7 @@ class Blip2Attention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -290,10 +292,10 @@ class Blip2Attention(nn.Cell):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipMLP
-class Blip2MLP(nn.Cell):
+class Blip2MLP(nn.Module):
 
     """
-    Blip2MLP is a multi-layer perceptron (MLP) implemented as a subclass of the nn.Cell class. It represents a feedforward neural network with two fully connected layers.
+    Blip2MLP is a multi-layer perceptron (MLP) implemented as a subclass of the nn.Module class. It represents a feedforward neural network with two fully connected layers.
     
     The Blip2MLP class initializes with a configuration object, which contains various parameters for the MLP. It sets the configuration object to the 'config' attribute and assigns the activation function
 based on the 'hidden_act' parameter from the configuration object.
@@ -312,7 +314,7 @@ based on the 'hidden_act' parameter from the configuration object.
         input_tensor = mindspore.Tensor(...)
         output_tensor = model.construct(input_tensor)
     
-    Please refer to the nn.Cell documentation for more information on how to use and train the Blip2MLP class.
+    Please refer to the nn.Module documentation for more information on how to use and train the Blip2MLP class.
     """
     def __init__(self, config):
         """
@@ -334,7 +336,7 @@ based on the 'hidden_act' parameter from the configuration object.
         self.fc1 = nn.Dense(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Dense(config.intermediate_size, config.hidden_size)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the Blip2MLP by applying linear transformations and activation functions to the input hidden states.
         
@@ -355,13 +357,13 @@ based on the 'hidden_act' parameter from the configuration object.
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->Blip2
-class Blip2EncoderLayer(nn.Cell):
+class Blip2EncoderLayer(nn.Module):
 
     """
         Blip2EncoderLayer represents a single layer in the Blip2 encoder, which consists of a self-attention mechanism
         followed by a feedforward neural network layer.
         
-        This class inherits from nn.Cell and is designed to be used within the Blip2 transformer model to process input 
+        This class inherits from nn.Module and is designed to be used within the Blip2 transformer model to process input 
         sequences in the encoder stack.
         
         Attributes:
@@ -403,11 +405,11 @@ class Blip2EncoderLayer(nn.Cell):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = Blip2Attention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Blip2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -482,7 +484,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2
-class Blip2Encoder(nn.Cell):
+class Blip2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`Blip2EncoderLayer`].
@@ -509,10 +511,10 @@ class Blip2Encoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layers = nn.CellList([Blip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Blip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -629,11 +631,11 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.embeddings = Blip2VisionEmbeddings(config)
         self.encoder = Blip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -694,10 +696,10 @@ class Blip2VisionModel(Blip2PreTrainedModel):
         return self.embeddings
 
 
-class Blip2QFormerMultiHeadAttention(nn.Cell):
+class Blip2QFormerMultiHeadAttention(nn.Module):
 
     """
-    This class represents a multi-head attention mechanism used in the Blip2QFormer model. It is designed to be compatible with the nn.Cell class.
+    This class represents a multi-head attention mechanism used in the Blip2QFormer model. It is designed to be compatible with the nn.Module class.
     
     Attributes:
         - config: A configuration object containing various hyperparameters for the attention mechanism.
@@ -852,7 +854,7 @@ class Blip2QFormerMultiHeadAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -959,12 +961,12 @@ class Blip2QFormerMultiHeadAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Blip2QFormer
-class Blip2QFormerSelfOutput(nn.Cell):
+class Blip2QFormerSelfOutput(nn.Module):
 
     """
     This class represents the output of the Blip2QFormerSelf layer in a QFormer model. It applies a series of transformations to the input hidden states and returns the final output.
     
-    This class inherits from the nn.Cell class.
+    This class inherits from the nn.Module class.
     
     Attributes:
         dense (nn.Dense): The dense layer used for linear transformation of the hidden states.
@@ -995,10 +997,11 @@ class Blip2QFormerSelfOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Method to construct the self output of a Blip2QFormer model.
         
@@ -1022,10 +1025,10 @@ class Blip2QFormerSelfOutput(nn.Cell):
         return hidden_states
 
 
-class Blip2QFormerAttention(nn.Cell):
+class Blip2QFormerAttention(nn.Module):
 
     """
-    This class represents the attention mechanism used in the Blip2QFormer model. It is a subclass of the nn.Cell class.
+    This class represents the attention mechanism used in the Blip2QFormer model. It is a subclass of the nn.Module class.
     
     The Blip2QFormerAttention class implements the attention mechanism that is responsible for attending to different parts of the input data. It consists of a multi-head attention layer and a self-output
 layer. The attention layer performs attention calculations on the input data, while the self-output layer processes the attention outputs.
@@ -1119,7 +1122,7 @@ the attention layer.
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1163,12 +1166,12 @@ the attention layer.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Blip2QFormer
-class Blip2QFormerIntermediate(nn.Cell):
+class Blip2QFormerIntermediate(nn.Module):
 
     """
     Blip2QFormerIntermediate represents an intermediate layer in a QFormer neural network model.
     
-    This class inherits from nn.Cell and is responsible for processing hidden states by applying a dense layer
+    This class inherits from nn.Module and is responsible for processing hidden states by applying a dense layer
     followed by an activation function specified in the configuration.
     
     Attributes:
@@ -1218,7 +1221,7 @@ class Blip2QFormerIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the intermediate representation of the Blip2QFormer model.
         
@@ -1239,11 +1242,11 @@ the operations performed within the method.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Blip2QFormer
-class Blip2QFormerOutput(nn.Cell):
+class Blip2QFormerOutput(nn.Module):
 
     """
     The Blip2QFormerOutput class represents a custom output layer for a transformer model, specifically designed for a Blip2Q model. 
-    This class inherits from nn.Cell and includes methods for initializing the layer and constructing the output.
+    This class inherits from nn.Module and includes methods for initializing the layer and constructing the output.
     
     Attributes:
         dense (nn.Dense): A fully connected layer to transform the hidden states.
@@ -1279,10 +1282,11 @@ addition with input tensor.
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output of the Blip2QFormer model.
         
@@ -1309,12 +1313,12 @@ addition with input tensor.
         return hidden_states
 
 
-class Blip2QFormerLayer(nn.Cell):
+class Blip2QFormerLayer(nn.Module):
 
     """
     This class represents a layer of a Blip2QFormer model, which is designed for efficient query processing in deep learning models. 
     The Blip2QFormerLayer class contains methods for initializing the layer, constructing the layer, and processing feed-forward operations. 
-    It inherits from nn.Cell.
+    It inherits from nn.Module.
     
     Methods:
     - __init__(self, config, layer_idx): Initializes the Blip2QFormerLayer instance with the given configuration and layer index.
@@ -1371,7 +1375,7 @@ layer by processing attention mechanisms and feed-forward operations.
         self.intermediate_query = Blip2QFormerIntermediate(config)
         self.output_query = Blip2QFormerOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1504,7 +1508,7 @@ hidden_size).
         return layer_output
 
 
-class Blip2QFormerEncoder(nn.Cell):
+class Blip2QFormerEncoder(nn.Module):
 
     """
     Blip2QFormerEncoder is a class representing an encoder for a Blip2QFormer neural network model. 
@@ -1513,7 +1517,7 @@ class Blip2QFormerEncoder(nn.Cell):
     
     Attributes:
         config (dict): Configuration settings for the encoder.
-        layer (nn.CellList): List of Blip2QFormerLayer instances representing the encoder layers.
+        layer (nn.ModuleList): List of Blip2QFormerLayer instances representing the encoder layers.
         gradient_checkpointing (bool): Flag indicating whether gradient checkpointing is enabled.
     
     Methods:
@@ -1548,12 +1552,12 @@ class Blip2QFormerEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [Blip2QFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1692,7 +1696,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
         self.encoder = Blip2QFormerEncoder(config)
@@ -1780,7 +1785,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def construct(
+    def forward(
         self,
         query_embeds: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1916,7 +1921,7 @@ multimodal language generation.
         get_input_embeddings(self): Returns the input embeddings of the language model.
         set_input_embeddings(self, value): Sets the input embeddings of the language model.
         set_output_embeddings(self, new_embeddings): Sets the output embeddings of the language model.
-        get_output_embeddings(self) -> nn.Cell: Returns the output embeddings of the language model.
+        get_output_embeddings(self) -> nn.Module: Returns the output embeddings of the language model.
         get_encoder(self): Returns the encoder of the language model.
         get_decoder(self): Returns the decoder of the language model.
         _tie_weights(self): Ties the weights of the encoder and decoder in the language model.
@@ -2032,7 +2037,7 @@ Optional[bool] = None) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]
         """
         self.language_model.set_output_embeddings(new_embeddings)
 
-    def get_output_embeddings(self) -> nn.Cell:
+    def get_output_embeddings(self) -> nn.Module:
         """
         Returns the output embeddings of the Blip2Model.
         
@@ -2040,7 +2045,7 @@ Optional[bool] = None) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]
             self: Blip2Model - The instance of the Blip2Model class.
         
         Returns:
-            nn.Cell - The output embeddings of the Blip2Model language model.
+            nn.Module - The output embeddings of the Blip2Model language model.
         
         Raises:
             None.
@@ -2255,7 +2260,7 @@ Optional[bool] = None) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]
 
         return query_outputs
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         input_ids: mindspore.Tensor,
@@ -2394,7 +2399,7 @@ questions based on the image.
     - `get_input_embeddings(self)`: Returns the input embeddings of the language model.
     - `set_input_embeddings(self, value)`: Sets the input embeddings of the language model to the given value.
     - `set_output_embeddings(self, new_embeddings)`: Sets the output embeddings of the language model to the given new embeddings.
-    - `get_output_embeddings(self) -> nn.Cell`: Returns the output embeddings of the language model.
+    - `get_output_embeddings(self) -> nn.Module`: Returns the output embeddings of the language model.
     - `get_encoder(self)`: Returns the encoder of the language model.
     - `get_decoder(self)`: Returns the decoder of the language model.
     - `_tie_weights(self)`: Ties the weights of the encoder and decoder if the model is not using a decoder-only language model.
@@ -2507,7 +2512,7 @@ The method updates the input embeddings of the language model with the provided 
         """
         self.language_model.set_output_embeddings(new_embeddings)
 
-    def get_output_embeddings(self) -> nn.Cell:
+    def get_output_embeddings(self) -> nn.Module:
         """
         Get the output embeddings of the Blip2ForConditionalGeneration class.
         
@@ -2515,7 +2520,7 @@ The method updates the input embeddings of the language model with the provided 
             self (Blip2ForConditionalGeneration): The instance of the Blip2ForConditionalGeneration class.
         
         Returns:
-            nn.Cell: The output embeddings of the language model.
+            nn.Module: The output embeddings of the language model.
         
         Raises:
             None.
@@ -2581,7 +2586,7 @@ the language model.
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         input_ids: mindspore.Tensor,

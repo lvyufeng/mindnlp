@@ -167,7 +167,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaForPreTraining"),
         ("funnel", "FunnelForPreTraining"),
         ("gpt_pangu", "GPTPanguForCausalLM"),
-        ("ibert", "IBertForPreTraining"),
+        ("ibert", "IBertForMaskedLM"),
         ("mamba", "MambaForCausalLM"),
         ("minicpm", "MiniCPMForCausalLM"),
         ("rwkv", "RwkvForCausalLM"),

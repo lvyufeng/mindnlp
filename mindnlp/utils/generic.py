@@ -435,7 +435,7 @@ def _get_frameworks_and_test_func(x):
 
 def to_py_obj(obj):
     """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    Convert a TensorFlow tensor, MindSpore tensor, Numpy array or python list to a python list.
     """
     framework_to_py_obj = {
         "ms": lambda obj: obj.asnumpy().tolist(),
@@ -460,7 +460,7 @@ def to_py_obj(obj):
 
 def to_numpy(obj):
     """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    Convert a TensorFlow tensor, MindSpore tensor, Numpy array or python list to a Numpy array.
     """
     framework_to_numpy = {
         "ms": lambda obj: obj.asnumpy(),

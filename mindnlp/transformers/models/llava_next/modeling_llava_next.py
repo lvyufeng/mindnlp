@@ -21,7 +21,10 @@ from functools import reduce
 import numpy as np
 
 import mindspore
-from mindspore import nn, Tensor, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import Normal
 
 from ...modeling_utils import PreTrainedModel
@@ -69,7 +72,7 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
 
 def unpad_image(tensor, original_size):
     """
-    Unpads a PyTorch tensor of a padded and resized image.
+    Unpads a MindSpore tensor of a padded and resized image.
 
     Args:
         tensor (`mindspore.Tensor`):
@@ -143,13 +146,13 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaNext
-class LlavaNextMultiModalProjector(nn.Cell):
+class LlavaNextMultiModalProjector(nn.Module):
 
     """
     This class represents a multi-modal projector for the LlavaNext model. It is used to project image features and text embeddings into a shared hidden space.
     
     Inherits from:
-        nn.Cell
+        nn.Module
     
     Attributes:
         linear_1 (nn.Dense): A fully connected layer that maps image features to the hidden size specified in the configuration.
@@ -179,12 +182,12 @@ class LlavaNextMultiModalProjector(nn.Cell):
         super().__init__()
 
         self.linear_1 = nn.Dense(
-            config.vision_config.hidden_size, config.text_config.hidden_size, has_bias=True)
+            config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Dense(
-            config.text_config.hidden_size, config.text_config.hidden_size, has_bias=True)
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
-    def construct(self, image_features):
+    def forward(self, image_features):
         """
         Constructs the hidden states for the LlavaNextMultiModalProjector.
         
@@ -531,7 +534,7 @@ need to be learned.
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         pixel_values: mindspore.Tensor = None,

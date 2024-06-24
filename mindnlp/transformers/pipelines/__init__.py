@@ -412,7 +412,7 @@ def pipeline(
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
-            actual instance of a pretrained model inheriting from [`PreTrainedModel`] (for PyTorch) or
+            actual instance of a pretrained model inheriting from [`PreTrainedModel`] (for MindSpore) or
             [`TFPreTrainedModel`] (for TensorFlow).
 
             If not provided, the default for the `task` will be loaded.

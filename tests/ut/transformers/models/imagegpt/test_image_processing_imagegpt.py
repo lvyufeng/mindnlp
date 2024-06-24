@@ -232,7 +232,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(
             **self.image_processor_dict)
-        # create random PyTorch tensors
+        # create random MindSpore tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(
             equal_resolution=False, torchify=True)
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(

@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================
-"""PyTorch VisionTextDualEncoder model."""
+"""MindSpore VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 
 from ...modeling_utils import PreTrainedModel
 from ....utils import logging
@@ -89,8 +91,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, has_bias=False)
-        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, has_bias=False)
+        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = Parameter(ms.tensor(self.config.logit_scale_init_value))
 
     def get_text_features(
@@ -175,7 +177,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         return image_features
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         pixel_values: Optional[ms.Tensor] = None,
@@ -310,9 +312,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                    - A path or url to a *MindSpore checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      loading path is slower than converting the MindSpore checkpoint in a Flax model using the provided
                       conversion scripts and loading the Flax model afterwards.
 
             text_model_name_or_path (`str`, *optional*):
@@ -321,9 +323,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                    - A path or url to a *MindSpore checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      loading path is slower than converting the MindSpore checkpoint in a Flax model using the provided
                       conversion scripts and loading the Flax model afterwards.
 
             model_args (remaining positional arguments, *optional*):

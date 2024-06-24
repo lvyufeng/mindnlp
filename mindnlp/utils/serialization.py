@@ -71,25 +71,25 @@ def mkdtemp():
     finally:
         shutil.rmtree(path)
 
-class PyTorchFileReader:
+class MindSporeFileReader:
     """
     Class to allow PackageImporter to operate on unzipped packages. Methods
-    copy the behavior of the internal PyTorchFileReader class (which is used for
+    copy the behavior of the internal MindSporeFileReader class (which is used for
     accessing packages in all other cases).
 
     N.B.: ScriptObjects are not depickleable or accessible via this DirectoryReader
-    class due to ScriptObjects requiring an actual PyTorchFileReader instance.
+    class due to ScriptObjects requiring an actual MindSporeFileReader instance.
     """
     def __init__(self, file):
         """
-        Initializes a new instance of PyTorchFileReader.
+        Initializes a new instance of MindSporeFileReader.
         
         Args:
-            self (PyTorchFileReader): The instance of the PyTorchFileReader class.
+            self (MindSporeFileReader): The instance of the MindSporeFileReader class.
             file (str): The path to the zip file to be read.
         
         Returns:
-            None. This method initializes the PyTorchFileReader instance with the provided file.
+            None. This method initializes the MindSporeFileReader instance with the provided file.
         
         Raises:
             IOError: If the file specified by the 'file' parameter does not exist or cannot be opened.
@@ -101,19 +101,19 @@ class PyTorchFileReader:
 
     def open_record(self, name):
         """
-        Opens a record file from the PyTorchFileReader directory.
+        Opens a record file from the MindSporeFileReader directory.
         
         Args:
-            self (PyTorchFileReader): The instance of the PyTorchFileReader class.
+            self (MindSporeFileReader): The instance of the MindSporeFileReader class.
             name (str): The name of the record file to open.
         
         Returns:
-            None: If the specified record file does not exist in the PyTorchFileReader directory.
+            None: If the specified record file does not exist in the MindSporeFileReader directory.
         
         Raises:
             None.
         
-        This method checks if the specified record file exists in the PyTorchFileReader directory. If it does, the file is opened and returned. If the file does not exist, None is returned.
+        This method checks if the specified record file exists in the MindSporeFileReader directory. If it does, the file is opened and returned. If the file does not exist, None is returned.
         """
         filename = f"{self.directory}/{name}"
         if filename in self.file.namelist():
@@ -122,18 +122,18 @@ class PyTorchFileReader:
 
     def read_record(self, name):
         """
-        Reads a record from a PyTorch file.
+        Reads a record from a MindSpore file.
         
         Args:
-            self (PyTorchFileReader): An instance of the PyTorchFileReader class.
-            name (str): The name of the record to read from the PyTorch file.
+            self (MindSporeFileReader): An instance of the MindSporeFileReader class.
+            name (str): The name of the record to read from the MindSpore file.
         
         Returns:
-            None: If the record with the specified name does not exist in the PyTorch file.
+            None: If the record with the specified name does not exist in the MindSpore file.
         
         Raises:
-            FileNotFoundError: If the PyTorch file does not exist in the specified directory.
-            IOError: If there is an error in reading the PyTorch file.
+            FileNotFoundError: If the MindSpore file does not exist in the specified directory.
+            IOError: If there is an error in reading the MindSpore file.
         
         """
         filename = f"{self.directory}/{name}"
@@ -143,10 +143,10 @@ class PyTorchFileReader:
 
     def has_record(self, name):
         """
-        This method checks if a record with the specified name exists in the PyTorchFileReader's directory.
+        This method checks if a record with the specified name exists in the MindSporeFileReader's directory.
         
         Args:
-            self (PyTorchFileReader): An instance of the PyTorchFileReader class.
+            self (MindSporeFileReader): An instance of the MindSporeFileReader class.
             name (str): The name of the record to be checked in the directory.
         
         Returns:
@@ -162,10 +162,10 @@ class PyTorchFileReader:
         self,
     ):
         """
-        Retrieves a list of all records from the PyTorchFileReader object.
+        Retrieves a list of all records from the MindSporeFileReader object.
         
         Args:
-            self: The PyTorchFileReader object itself.
+            self: The MindSporeFileReader object itself.
         
         Returns:
             None. This method does not return any value.
@@ -173,10 +173,10 @@ class PyTorchFileReader:
         Raises:
             None.
         
-        This method iterates through the files in the PyTorchFileReader object's directory and retrieves the names of all records. The records are then returned as a list of file names.
+        This method iterates through the files in the MindSporeFileReader object's directory and retrieves the names of all records. The records are then returned as a list of file names.
         
         Note:
-            - The PyTorchFileReader object must be initialized with a valid directory.
+            - The MindSporeFileReader object must be initialized with a valid directory.
             - The list of file names returned only includes the names of the files, without the directory path.
         """
         files = [name.replace(self.directory + '/' , '')for name in self.file.namelist()]
@@ -184,20 +184,20 @@ class PyTorchFileReader:
 
     def get_record_offset(self, name):
         """
-        Returns the header offset of a specified record in a PyTorch file.
+        Returns the header offset of a specified record in a MindSpore file.
         
         Args:
-            self (PyTorchFileReader): An instance of the PyTorchFileReader class.
+            self (MindSporeFileReader): An instance of the MindSporeFileReader class.
             name (str): The name of the record for which the header offset is to be retrieved.
         
         Returns:
-            None: If the specified record does not exist in the PyTorch file.
+            None: If the specified record does not exist in the MindSpore file.
         
         Raises:
             None.
         
-        This method takes in the self parameter, which is an instance of the PyTorchFileReader class. It also takes a name parameter, which represents the name of the record for which the header offset is to
-be retrieved. The method checks if the specified record exists in the PyTorch file by creating the filename using the directory attribute of the PyTorchFileReader instance and the provided name. If the
+        This method takes in the self parameter, which is an instance of the MindSporeFileReader class. It also takes a name parameter, which represents the name of the record for which the header offset is to
+be retrieved. The method checks if the specified record exists in the MindSpore file by creating the filename using the directory attribute of the MindSporeFileReader instance and the provided name. If the
 filename exists in the file's namelist, the method returns the header offset of the file info associated with the filename. Otherwise, it returns None, indicating that the specified record does not exist in
 the file.
         """
@@ -670,7 +670,7 @@ class _open_zipfile_reader(_opener):
         name_or_buffer: The name or buffer of the file to be opened.
     
     Methods:
-        __init__: Initializes the _open_zipfile_reader instance, using the specified name_or_buffer to open a PyTorchFileReader.
+        __init__: Initializes the _open_zipfile_reader instance, using the specified name_or_buffer to open a MindSporeFileReader.
     """
     def __init__(self, name_or_buffer) -> None:
         """
@@ -689,7 +689,7 @@ class _open_zipfile_reader(_opener):
             - ValueError: If the name_or_buffer parameter is empty or invalid.
             - IOError: If there is an error reading the zipfile from the provided name_or_buffer.
         """
-        super().__init__(PyTorchFileReader(name_or_buffer))
+        super().__init__(MindSporeFileReader(name_or_buffer))
 
 def _rebuild_tensor_v2(storage, storage_offset, size, stride, requires_grad, backward_hooks, metadata=None):
     '''Rebuilds a tensor based on the provided parameters.
@@ -926,7 +926,7 @@ def _legacy_load(f, pickle_module, **pickle_load_args):
         None. This function does not return any value.
         
     Raises:
-        ValueError: Raised if legacy load for Pytorch is not supported.
+        ValueError: Raised if legacy load for MindSpore is not supported.
         RuntimeError: Raised if an unknown saved id type is encountered during deserialization.
         RuntimeError: Raised if the magic number in the file does not match the expected value.
         RuntimeError: Raised if the protocol version in the file does not match the expected value.
@@ -956,7 +956,7 @@ def _legacy_load(f, pickle_module, **pickle_load_args):
 
         with closing(tarfile.open(fileobj=f, mode='r:', format=tarfile.PAX_FORMAT)) as tar, \
                 mkdtemp() as tmpdir:
-            raise ValueError('do not support legacy load for Pytorch.')
+            raise ValueError('do not support legacy load for MindSpore.')
 
     deserialized_objects = {}
 

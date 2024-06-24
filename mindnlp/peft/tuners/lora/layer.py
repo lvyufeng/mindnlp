@@ -452,7 +452,7 @@ scaling the layer's parameters, as well as performing mixed batch forward operat
 
 
 # Below code is based on https://github.com/microsoft/LoRA/blob/main/loralib/layers.py
-# and modified to work with PyTorch FSDP
+# and modified to work with MindSpore FSDP
 
 
 #  ------------------------------------------------------------------------------------------

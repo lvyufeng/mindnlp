@@ -22,7 +22,9 @@ from typing import Any, Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore import numpy as mnp
 from mindspore.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from mindspore.common.initializer import Normal
@@ -55,7 +57,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         import tensorflow as tf
     except ImportError:
         logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+            "Loading a TensorFlow model in MindSpore, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
@@ -130,7 +132,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
                 e.args += (pointer.shape, array.shape)
                 raise
 
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info("Initialize MindSpore weight {}".format(name))
 
         if name[-1] == "q_proj":
             pointer.data[:, : config.n_embd] = ms.Tensor(
@@ -157,13 +159,13 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
     return model
 
 
-class ImageGPTLayerNorm(nn.Cell):
+class ImageGPTLayerNorm(nn.Module):
     def __init__(self, hidden_size: Tuple[int], eps: float = 1e-5):
         super().__init__()
         self.eps = eps
         self.weight = ms.Parameter(ms.Tensor(np.ones((hidden_size, ))))
 
-    def construct(self, tensor: ms.Tensor) -> tuple:
+    def forward(self, tensor: ms.Tensor) -> tuple:
         # input is not mean centered
         return (
             tensor
@@ -172,7 +174,7 @@ class ImageGPTLayerNorm(nn.Cell):
         )
 
 
-class ImageGPTAttention(nn.Cell):
+class ImageGPTAttention(nn.Module):
     def __init__(self, config, is_cross_attention: Optional[bool] = False, layer_idx: Optional[int] = None):
         super().__init__()
 
@@ -341,7 +343,7 @@ class ImageGPTAttention(nn.Cell):
         new_shape = tensor.shape[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         layer_past: Optional[bool] = None,
@@ -400,7 +402,7 @@ class ImageGPTAttention(nn.Cell):
         return outputs  # a, present, (attentions)
 
 
-class ImageGPTMLP(nn.Cell):
+class ImageGPTMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -409,7 +411,7 @@ class ImageGPTMLP(nn.Cell):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         hidden_states = hidden_states.astype(self.c_fc.weight.data.dtype)
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
@@ -418,7 +420,7 @@ class ImageGPTMLP(nn.Cell):
         return hidden_states
 
 
-class ImageGPTBlock(nn.Cell):
+class ImageGPTBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -438,7 +440,7 @@ class ImageGPTBlock(nn.Cell):
 
         self.mlp = ImageGPTMLP(inner_dim, config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: ms.Tensor,
         layer_past: Optional[bool] = None,
@@ -555,7 +557,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.CellList([ImageGPTBlock(config, layer_idx=i)
+        self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i)
                              for i in range(config.num_hidden_layers)])
         self.ln_f = ImageGPTLayerNorm(
             self.embed_dim, eps=config.layer_norm_epsilon)
@@ -578,7 +580,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[ms.Tensor]]] = None,
@@ -804,7 +806,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         super().__init__(config)
         self.transformer = ImageGPTModel(config)
         self.lm_head = nn.Dense(
-            config.n_embd, config.vocab_size - 1, has_bias=False)
+            config.n_embd, config.vocab_size - 1, bias=False)
 
         # Model parallel
         # Initialize weights and apply final processing
@@ -853,7 +855,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
             "token_type_ids": token_type_ids,
         }
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[ms.Tensor]]] = None,
@@ -995,12 +997,12 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = ImageGPTModel(config)
-        self.score = nn.Dense(config.n_embd, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.n_embd, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[ms.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[ms.Tensor]]] = None,

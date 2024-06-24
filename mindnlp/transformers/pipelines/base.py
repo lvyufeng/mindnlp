@@ -216,13 +216,13 @@ def load_model(
     **model_kwargs,
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow or MindSpore) to use from the `model` passed. Returns a tuple (framework, model).
 
     If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
     actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
     instantiate the model twice, this model is returned for use by the pipeline.
 
-    If both frameworks are installed and available for `model`, PyTorch is selected.
+    If both frameworks are installed and available for `model`, MindSpore is selected.
 
     Args:
         model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
@@ -290,13 +290,13 @@ def from_model(
     **model_kwargs,
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow or MindSpore) to use from the `model` passed. Returns a tuple (framework, model).
 
     If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
     actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
     instantiate the model twice, this model is returned for use by the pipeline.
 
-    If both frameworks are installed and available for `model`, PyTorch is selected.
+    If both frameworks are installed and available for `model`, MindSpore is selected.
 
     Args:
         model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
@@ -932,7 +932,7 @@ class Pipeline(_ScikitCompat):
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
-                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
+                Whether to save the model using `safetensors` or the traditional way for MindSpore or Tensorflow.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")

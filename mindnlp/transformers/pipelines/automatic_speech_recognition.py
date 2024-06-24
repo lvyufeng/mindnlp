@@ -198,7 +198,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`] for MindSpore and [`TFPreTrainedModel`] for TensorFlow.
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
@@ -231,9 +231,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             </Tip>
 
         framework (`str`, *optional*):
-            The framework to use, either `"ms"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            The framework to use, either `"ms"` for MindSpore or `"tf"` for TensorFlow. The specified framework must be
             installed. If no framework is specified, will default to the one currently installed. If no framework is
-            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
+            specified and both frameworks are installed, will default to the framework of the `model`, or to MindSpore if
             no model is provided.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the

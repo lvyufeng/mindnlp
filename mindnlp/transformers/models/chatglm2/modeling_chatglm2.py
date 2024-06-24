@@ -19,7 +19,9 @@ import copy
 import warnings
 from typing import Optional, Tuple, Union, List, Callable, Dict, Any
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 
 from mindnlp.utils import logging
 from ...modeling_outputs import (
@@ -125,7 +127,7 @@ class InvalidScoreLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class PrefixEncoder(nn.Cell):
+class PrefixEncoder(nn.Module):
     """
     The nn model to encode the prefix
     Input shape: (batch-size, prefix-length)
@@ -164,7 +166,7 @@ class PrefixEncoder(nn.Cell):
             self.embedding = nn.Embedding(config.pre_seq_len,
                                           config.num_layers * config.kv_channels * config.multi_query_group_num * 2)
 
-    def construct(self, prefix: mindspore.Tensor):
+    def forward(self, prefix: mindspore.Tensor):
         """
         Construct the past key values for the PrefixEncoder.
         
@@ -216,13 +218,13 @@ def split_tensor_along_last_dim(
     return tensor_list
 
 
-class RotaryEmbedding(nn.Cell):
+class RotaryEmbedding(nn.Module):
 
     """
     This class represents a Rotary Position Embedding module that enhances the Transformer model. It provides a mechanism to incorporate positional information into the model's input embeddings, improving its
 ability to understand the order and relationships between elements in a sequence.
     
-    The RotaryEmbedding class inherits from the nn.Cell class, a base class for all neural network modules in the MindSpore framework.
+    The RotaryEmbedding class inherits from the nn.Module class, a base class for all neural network modules in the MindSpore framework.
     
     The RotaryEmbedding class contains the following methods:
     
@@ -274,7 +276,7 @@ ability to understand the order and relationships between elements in a sequence
         self.dim = dim
         self.original_impl = original_impl
 
-    def construct_impl(
+    def forward_impl(
             self, seq_len: int, n_elem: int, dtype: mindspore.dtype, base: int = 10000
     ):
         """Enhanced Transformer with Rotary Position Embedding.
@@ -299,7 +301,7 @@ ability to understand the order and relationships between elements in a sequence
             cache = cache.bfloat16() if dtype == mindspore.bfloat16 else cache.half()
         return cache
 
-    def construct(self, max_seq_len, offset=0):
+    def forward(self, max_seq_len, offset=0):
         """
         Constructs a rotary embedding for a given maximum sequence length.
         
@@ -397,10 +399,10 @@ class inherits from the nn.LayerNorm class, which provides the basic functionali
         super().__init__([normalized_shape], begin_norm_axis, begin_params_axis, gamma_init, beta_init, eps, dtype)
 
 
-class RMSNorm(nn.Cell):
+class RMSNorm(nn.Module):
 
     """
-    RMSNorm is a normalization technique implemented as a Python class that inherits from nn.Cell. It is designed to normalize the hidden states of a neural network using the Root Mean Square (RMS) method.
+    RMSNorm is a normalization technique implemented as a Python class that inherits from nn.Module. It is designed to normalize the hidden states of a neural network using the Root Mean Square (RMS) method.
     
     The RMSNorm class has the following attributes:
     
@@ -418,13 +420,13 @@ class RMSNorm(nn.Cell):
     import mindspore.nn as nn
     import mindspore
     
-    class RMSNorm(nn.Cell):
+    class RMSNorm(nn.Module):
         def __init__(self, normalized_shape, eps=1e-05, dtype=None, **kwargs):
             super().__init__()
             self.weight = mindspore.Parameter(ops.zeros(normalized_shape, dtype=dtype))
             self.eps = eps
     
-        def construct(self, hidden_states: mindspore.Tensor):
+        def forward(self, hidden_states: mindspore.Tensor):
             input_dtype = hidden_states.dtype
             variance = hidden_states.to(mindspore.float32).pow(2).mean(-1, keep_dims=True)
             hidden_states = hidden_states * ops.rsqrt(variance + self.eps)
@@ -451,7 +453,7 @@ class RMSNorm(nn.Cell):
         self.weight = Parameter(ops.zeros(normalized_shape, dtype=dtype))
         self.eps = eps
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         """
         Constructs the RMSNorm of the given hidden states.
         
@@ -488,11 +490,11 @@ class RMSNorm(nn.Cell):
         return (self.weight * hidden_states).to(input_dtype)
 
 
-class CoreAttention(nn.Cell):
+class CoreAttention(nn.Module):
 
     """
     The CoreAttention class represents a core component of attention mechanism for neural network models. This class is used to perform attention operations on query, key, and value layers. It inherits from
-the nn.Cell class.
+the nn.Module class.
     
     Attributes:
         config (ChatGLM2Config): The configuration for the attention mechanism.
@@ -547,7 +549,7 @@ optionally applies the attention mask.
 
         self.attention_dropout = nn.Dropout(p=config.attention_dropout)
 
-    def construct(self, query_layer, key_layer, value_layer, attention_mask):
+    def forward(self, query_layer, key_layer, value_layer, attention_mask):
         """
         Constructs the attention layer of the CoreAttention class.
         
@@ -660,7 +662,7 @@ optionally applies the attention mask.
         return context_layer
 
 
-class SelfAttention(nn.Cell):
+class SelfAttention(nn.Module):
     """Parallel self-attention layer abstract class.
 
     Self-attention layer takes input with size [s, b, h]
@@ -698,16 +700,16 @@ class SelfAttention(nn.Cell):
                     self.projection_size + 2 * self.hidden_size_per_attention_head * config.multi_query_group_num
             )
         self.query_key_value = nn.Dense(config.hidden_size, self.qkv_hidden_size,
-                                        has_bias=config.add_bias_linear or config.add_qkv_bias,
+                                        bias=config.add_bias_linear or config.add_qkv_bias,
                                         **_config_to_kwargs(config))
 
         self.core_attention = CoreAttention(config, self.layer_number)
 
         # Output.
-        self.dense = nn.Dense(self.projection_size, config.hidden_size, has_bias=config.add_bias_linear,
+        self.dense = nn.Dense(self.projection_size, config.hidden_size, bias=config.add_bias_linear,
                               **_config_to_kwargs(config))
 
-    def construct(
+    def forward(
             self, hidden_states, attention_mask, rotary_pos_emb, kv_cache=None, use_cache=True
     ):
         """
@@ -845,7 +847,7 @@ def _config_to_kwargs(args):
     return common_kwargs
 
 
-class MLP(nn.Cell):
+class MLP(nn.Module):
     """MLP.
 
     MLP will take the input with h hidden state, project it to 4*h
@@ -874,7 +876,7 @@ class MLP(nn.Cell):
         self.dense_h_to_4h = nn.Dense(
             config.hidden_size,
             config.ffn_hidden_size * 2,
-            has_bias=self.add_bias,
+            bias=self.add_bias,
             **_config_to_kwargs(config)
         )
 
@@ -888,11 +890,11 @@ class MLP(nn.Cell):
         self.dense_4h_to_h = nn.Dense(
             config.ffn_hidden_size,
             config.hidden_size,
-            has_bias=self.add_bias,
+            bias=self.add_bias,
             **_config_to_kwargs(config)
         )
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the output of the MLP.
         
@@ -916,7 +918,7 @@ of the hidden states. The output tensor represents the result of applying the ML
         return output
 
 
-class GLMBlock(nn.Cell):
+class GLMBlock(nn.Module):
     """A single transformer layer.
 
     Transformer layer takes input with size [s, b, h] and returns an
@@ -963,7 +965,7 @@ class GLMBlock(nn.Cell):
         # MLP
         self.mlp = MLP(config)
 
-    def construct(
+    def forward(
             self, hidden_states, attention_mask, rotary_pos_emb, kv_cache=None, use_cache=True,
     ):
         """
@@ -1034,7 +1036,7 @@ class GLMBlock(nn.Cell):
         return output, kv_cache
 
 
-class GLMTransformer(nn.Cell):
+class GLMTransformer(nn.Module):
     """Transformer class."""
     def __init__(self, config: ChatGLM2Config):
         '''
@@ -1065,7 +1067,7 @@ class GLMTransformer(nn.Cell):
         def build_layer(layer_number):
             return GLMBlock(config, layer_number)
 
-        self.layers = nn.CellList([build_layer(i + 1) for i in range(self.num_layers)])
+        self.layers = nn.ModuleList([build_layer(i + 1) for i in range(self.num_layers)])
 
         if self.post_layer_norm:
             LayerNormFunc = RMSNorm if config.rmsnorm else LayerNorm
@@ -1092,7 +1094,7 @@ class GLMTransformer(nn.Cell):
         """
         return self.layers[layer_number]
 
-    def construct(
+    def forward(
             self, hidden_states, attention_mask, rotary_pos_emb, kv_caches=None,
             use_cache: Optional[bool] = True,
             output_hidden_states: Optional[bool] = False,
@@ -1219,7 +1221,7 @@ tokens and 1's for padding tokens. Defaults to None.
         return position_ids
 
 
-class Embedding(nn.Cell):
+class Embedding(nn.Module):
     """Language model embeddings."""
     def __init__(self, config: ChatGLM2Config):
         """
@@ -1250,7 +1252,7 @@ class Embedding(nn.Cell):
         )
         self.fp32_residual_connection = config.fp32_residual_connection
 
-    def construct(self, input_ids):
+    def forward(self, input_ids):
         """
         Construct word embeddings from input_ids.
         
@@ -1319,7 +1321,7 @@ prefix projection, prefix tokens, prefix encoder, and dropout.
         self.rotary_pos_emb = RotaryEmbedding(rotary_dim // 2, original_impl=config.original_rope,
                                               dtype=config.ms_dtype)
         self.encoder = init_method(GLMTransformer, config, **init_kwargs)
-        self.output_layer = init_method(nn.Dense, config.hidden_size, config.padded_vocab_size, has_bias=False,
+        self.output_layer = init_method(nn.Dense, config.hidden_size, config.padded_vocab_size, bias=False,
                                         dtype=config.ms_dtype, **init_kwargs)
         self.pre_seq_len = config.pre_seq_len
         self.prefix_projection = config.prefix_projection
@@ -1374,7 +1376,7 @@ prefix projection, prefix tokens, prefix encoder, and dropout.
         past_key_values = past_key_values.permute([2, 1, 0, 3, 4]).split(2)
         return past_key_values
 
-    def construct(
+    def forward(
             self,
             input_ids,
             position_ids: Optional[mindspore.Tensor] = None,
@@ -1606,7 +1608,7 @@ GPT-2.
             "use_cache": use_cache
         }
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             position_ids: Optional[mindspore.Tensor] = None,
@@ -2062,7 +2064,7 @@ set, or a tuple of tensors including logits and transformer outputs. The method 
         self.num_labels = config.num_labels
         self.transformer = ChatGLM2Model(config, empty_init=empty_init)
 
-        self.classifier_head = nn.Dense(config.hidden_size, config.num_labels, has_bias=True, dtype=mindspore.float16)
+        self.classifier_head = nn.Dense(config.hidden_size, config.num_labels, bias=True, dtype=mindspore.float16)
         if config.classifier_dropout is not None:
             self.dropout = nn.Dropout(p=config.classifier_dropout)
         else:
@@ -2072,7 +2074,7 @@ set, or a tuple of tensors including logits and transformer outputs. The method 
         if self.config.quantization_bit:
             self.quantize(self.config.quantization_bit, empty_init=True)
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             position_ids: Optional[mindspore.Tensor] = None,

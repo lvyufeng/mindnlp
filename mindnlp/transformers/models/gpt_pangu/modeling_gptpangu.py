@@ -18,7 +18,9 @@ from typing import Tuple
 import math
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -40,10 +42,10 @@ GPTPangu_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class GPTPanguAttention(nn.Cell):
+class GPTPanguAttention(nn.Module):
 
     """
-    Represents the GPTPanguAttention class, which inherits from nn.Cell. This class contains methods for attention mechanism used in GPT (Generative Pre-trained Transformer) models.
+    Represents the GPTPanguAttention class, which inherits from nn.Module. This class contains methods for attention mechanism used in GPT (Generative Pre-trained Transformer) models.
     
     Methods:
         - __init__(config): Initializes the GPTPanguAttention instance with the given configuration.
@@ -91,10 +93,10 @@ hidden_states and optional past layers, masks, custom query, cache usage, and at
 
         self.scale_attn_weights = config.scale_attn_weights
 
-        self.k_proj = nn.Dense(self.embed_dim, self.embed_dim, has_bias=True)
-        self.v_proj = nn.Dense(self.embed_dim, self.embed_dim, has_bias=True)
-        self.q_proj = nn.Dense(self.embed_dim, self.embed_dim, has_bias=True)
-        self.c_proj = nn.Dense(self.embed_dim, self.embed_dim, has_bias=True)
+        self.k_proj = nn.Dense(self.embed_dim, self.embed_dim, bias=True)
+        self.v_proj = nn.Dense(self.embed_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Dense(self.embed_dim, self.embed_dim, bias=True)
+        self.c_proj = nn.Dense(self.embed_dim, self.embed_dim, bias=True)
 
         self.attn_dropout = nn.Dropout(p=config.attn_pdrop)
         self.resid_dropout = nn.Dropout(p=config.resid_pdrop)
@@ -174,7 +176,7 @@ hidden_states and optional past layers, masks, custom query, cache usage, and at
         new_shape = tensor.shape[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         layer_past=None,
@@ -236,12 +238,12 @@ hidden_states and optional past layers, masks, custom query, cache usage, and at
         return outputs  # a, present, (attentions)
 
 
-class GPTPanguMLP(nn.Cell):
+class GPTPanguMLP(nn.Module):
 
     """
     GPTPanguMLP represents a multi-layer perceptron (MLP) used in the GPT-Pangu model for processing intermediate hidden states.
     
-    This class inherits from nn.Cell and contains methods for initializing the MLP layers and processing hidden states through a feedforward neural network.
+    This class inherits from nn.Module and contains methods for initializing the MLP layers and processing hidden states through a feedforward neural network.
     
     Attributes:
         c_fc (nn.Dense): Fully connected layer to transform input hidden states.
@@ -283,7 +285,7 @@ class GPTPanguMLP(nn.Cell):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(p=config.resid_pdrop)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs the hidden states by applying a series of transformations.
         
@@ -304,7 +306,7 @@ class GPTPanguMLP(nn.Cell):
         return hidden_states
 
 
-class GPTPanguBlock(nn.Cell):
+class GPTPanguBlock(nn.Module):
 
     """
     This class represents a block of the GPTPangu model, containing layers for attention and feed-forward processing.
@@ -327,7 +329,7 @@ class GPTPanguBlock(nn.Cell):
     - outputs: A tuple containing the final hidden states after processing.
     
     Inherits from:
-    - nn.Cell
+    - nn.Module
     """
     def __init__(self, config):
         """
@@ -351,12 +353,12 @@ class GPTPanguBlock(nn.Cell):
         hidden_size = config.hidden_size
         inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
         self.attn = GPTPanguAttention(config)
-        self.ln_2 = nn.LayerNorm([hidden_size], epsilon=config.layer_norm_epsilon)
+        self.ln_2 = nn.LayerNorm([hidden_size], eps=config.layer_norm_epsilon)
         self.mlp = GPTPanguMLP(inner_dim, config)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         layer_past=None,
@@ -474,7 +476,7 @@ GPTPanguModel class inherits from the GPTPanguPreTrainedModel class.
         wpe (nn.Embedding): The position embedding layer.
         wqe (nn.Embedding): The query embedding layer.
         drop (nn.Dropout): The dropout layer.
-        h (nn.CellList): The list of GPTPanguBlock layers.
+        h (nn.ModuleList): The list of GPTPanguBlock layers.
         ln_f (nn.LayerNorm): The layer normalization layer.
         gradient_checkpointing (bool): Whether to use gradient checkpointing.
     """
@@ -504,8 +506,8 @@ GPTPanguModel class inherits from the GPTPanguPreTrainedModel class.
         self.wqe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(p=config.embd_pdrop)
-        self.h = nn.CellList([GPTPanguBlock(config) for _ in range(config.num_layers)])
-        self.ln_f = nn.LayerNorm([self.embed_dim], epsilon=config.layer_norm_epsilon)
+        self.h = nn.ModuleList([GPTPanguBlock(config) for _ in range(config.num_layers)])
+        self.ln_f = nn.LayerNorm([self.embed_dim], eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -544,7 +546,7 @@ GPTPanguModel class inherits from the GPTPanguPreTrainedModel class.
         """
         self.wte = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         past_key_values=None,
@@ -740,7 +742,7 @@ step.
         """
         super().__init__(config)
         self.transformer = GPTPanguModel(config)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -824,7 +826,7 @@ step.
             "token_type_ids": token_type_ids,
         }
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         past_key_values=None,

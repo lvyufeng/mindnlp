@@ -17,7 +17,9 @@ import math
 from typing import Optional, Tuple, Union
 import numpy as np
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging
@@ -50,7 +52,7 @@ LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LayoutLMLayerNorm = nn.LayerNorm
 
 
-class LayoutLMEmbeddings(nn.Cell):
+class LayoutLMEmbeddings(nn.Module):
     """forward the embeddings from word, position and token_type embeddings."""
     def __init__(self, config):
         """
@@ -74,12 +76,12 @@ class LayoutLMEmbeddings(nn.Cell):
         self.w_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        self.LayerNorm = LayoutLMLayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = LayoutLMLayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
         self.position_ids = ops.arange(config.max_position_embeddings).broadcast_to((1, -1))
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         bbox=None,
@@ -155,7 +157,7 @@ class LayoutLMEmbeddings(nn.Cell):
         return embeddings
 
 
-class LayoutLMSelfAttention(nn.Cell):
+class LayoutLMSelfAttention(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->LayoutLM"""
     def __init__(self, config, position_embedding_type=None):
         """
@@ -230,7 +232,7 @@ are obtained from the attributes `num_attention_heads` and `attention_head_size`
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -351,7 +353,7 @@ are obtained from the attributes `num_attention_heads` and `attention_head_size`
         return outputs
 
 
-class LayoutLMSelfOutput(nn.Cell):
+class LayoutLMSelfOutput(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -373,10 +375,11 @@ class LayoutLMSelfOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output of the LayoutLMSelfOutput layer.
         
@@ -400,7 +403,7 @@ class LayoutLMSelfOutput(nn.Cell):
         return hidden_states
 
 
-class LayoutLMAttention(nn.Cell):
+class LayoutLMAttention(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM"""
     def __init__(self, config, position_embedding_type=None):
         """
@@ -470,7 +473,7 @@ attention heads, attention head size, and already pruned heads stored in the ins
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -513,7 +516,7 @@ attention heads, attention head size, and already pruned heads stored in the ins
         return outputs
 
 
-class LayoutLMIntermediate(nn.Cell):
+class LayoutLMIntermediate(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertIntermediate"""
     def __init__(self, config):
         """
@@ -537,7 +540,7 @@ class LayoutLMIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the intermediate layer in the LayoutLM model.
         
@@ -556,7 +559,7 @@ class LayoutLMIntermediate(nn.Cell):
         return hidden_states
 
 
-class LayoutLMOutput(nn.Cell):
+class LayoutLMOutput(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -581,10 +584,11 @@ class LayoutLMOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Construct method in the LayoutLMOutput class.
         
@@ -605,7 +609,7 @@ class LayoutLMOutput(nn.Cell):
         return hidden_states
 
 
-class LayoutLMLayer(nn.Cell):
+class LayoutLMLayer(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -634,7 +638,7 @@ class LayoutLMLayer(nn.Cell):
         self.intermediate = LayoutLMIntermediate(config)
         self.output = LayoutLMOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -748,7 +752,7 @@ decoder, the tuple also includes the present key-value tensor(s) of shape (2, ba
         return layer_output
 
 
-class LayoutLMEncoder(nn.Cell):
+class LayoutLMEncoder(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->LayoutLM"""
     def __init__(self, config):
         """Initializes an instance of the LayoutLMEncoder class.
@@ -765,10 +769,10 @@ class LayoutLMEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([LayoutLMLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([LayoutLMLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -865,7 +869,7 @@ attentions.
         )
 
 
-class LayoutLMPooler(nn.Cell):
+class LayoutLMPooler(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertPooler"""
     def __init__(self, config):
         """
@@ -885,7 +889,7 @@ class LayoutLMPooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method 'construct' in the class 'LayoutLMPooler' constructs a pooled output tensor based on the hidden states provided.
         
@@ -909,7 +913,7 @@ class LayoutLMPooler(nn.Cell):
         return pooled_output
 
 
-class LayoutLMPredictionHeadTransform(nn.Cell):
+class LayoutLMPredictionHeadTransform(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -936,9 +940,9 @@ class LayoutLMPredictionHeadTransform(nn.Cell):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method 'construct' in the class 'LayoutLMPredictionHeadTransform' performs transformations on the input hidden states tensor.
         
@@ -959,7 +963,7 @@ the input hidden_states.
         return hidden_states
 
 
-class LayoutLMLMPredictionHead(nn.Cell):
+class LayoutLMLMPredictionHead(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -981,14 +985,14 @@ class LayoutLMLMPredictionHead(nn.Cell):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = mindspore.Parameter(ops.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the LayoutLMLMPredictionHead by transforming and decoding hidden states.
         
@@ -1007,7 +1011,7 @@ class LayoutLMLMPredictionHead(nn.Cell):
         return hidden_states
 
 
-class LayoutLMOnlyMLMHead(nn.Cell):
+class LayoutLMOnlyMLMHead(nn.Module):
     """Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->LayoutLM"""
     def __init__(self, config):
         """
@@ -1026,7 +1030,7 @@ class LayoutLMOnlyMLMHead(nn.Cell):
         super().__init__()
         self.predictions = LayoutLMLMPredictionHead(config)
 
-    def construct(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the LayoutLMOnlyMLMHead.
         
@@ -1063,7 +1067,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias is not None:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -1142,7 +1146,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1334,7 +1338,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1481,7 +1485,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         """
         return self.layoutlm.embeddings.word_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1634,7 +1638,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         """
         return self.layoutlm.embeddings.word_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,
@@ -1771,7 +1775,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         """
         return self.layoutlm.embeddings.word_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         bbox: Optional[mindspore.Tensor] = None,

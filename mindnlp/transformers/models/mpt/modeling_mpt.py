@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch MPT model."""
+"""MindSpore MPT model."""
 # pylint: disable=W0235
 # pylint: disable=E1123
 
@@ -21,7 +21,9 @@ from typing import Optional, Tuple, Union
 import numpy as np
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 from mindnlp.utils import logging
 from mindnlp.modules.functional import finfo
@@ -66,7 +68,7 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8):
     return alibi.squeeze(0)
 
 
-class MptAttention(nn.Cell):
+class MptAttention(nn.Module):
     """Multi-head self attention.
     Using torch or triton attention implemetation enables user to also use additive bias.
     """
@@ -116,10 +118,10 @@ n_heads).
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
         self.attn_dropout_p = config.attn_config.attn_pdrop
-        self.Wqkv = nn.Dense(self.hidden_size, 3 * self.hidden_size, has_bias=False)
-        self.out_proj = nn.Dense(self.hidden_size, self.hidden_size, has_bias=False)
+        self.Wqkv = nn.Dense(self.hidden_size, 3 * self.hidden_size, bias=False)
+        self.out_proj = nn.Dense(self.hidden_size, self.hidden_size, bias=False)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         position_bias: mindspore.Tensor,
@@ -189,7 +191,7 @@ shape (batch_size, num_heads, seq_length, seq_length), and the updated past key-
         return attn_output, attn_weights, past_key_value
 
 
-class MptMLP(nn.Cell):
+class MptMLP(nn.Module):
 
     """
     Class representing a Multi-Layer Perceptron (MLP) for Mpt models.
@@ -197,7 +199,7 @@ class MptMLP(nn.Cell):
     This class defines the architecture of a Multi-Layer Perceptron for Mpt models. It consists of an up projection layer, activation function (GELU), down projection layer, hidden dropout layer, and a
 construct method to process hidden states and residuals.
     
-    Inherits from nn.Cell.
+    Inherits from nn.Module.
     """
     def __init__(self, config: MptConfig):
         """
@@ -221,12 +223,12 @@ construct method to process hidden states and residuals.
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.up_proj = nn.Dense(hidden_size, 4 * hidden_size, has_bias=False)
+        self.up_proj = nn.Dense(hidden_size, 4 * hidden_size, bias=False)
         self.act = nn.GELU(approximate=False)
-        self.down_proj = nn.Dense(4 * hidden_size, hidden_size, has_bias=False)
+        self.down_proj = nn.Dense(4 * hidden_size, hidden_size, bias=False)
         self.hidden_dropout = config.attn_config.attn_pdrop
 
-    def construct(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a multi-layer perception (MLP) module.
         
@@ -252,10 +254,10 @@ construct method to process hidden states and residuals.
         return output
 
 
-class MptBlock(nn.Cell):
+class MptBlock(nn.Module):
 
     """
-    MptBlock represents a block within a Multi-Head Transformer model. This block consists of layers for self-attention and feed-forward networks. Inherits from nn.Cell.
+    MptBlock represents a block within a Multi-Head Transformer model. This block consists of layers for self-attention and feed-forward networks. Inherits from nn.Module.
     
     Attributes:
     - config: MptConfig object containing configuration parameters for the block.
@@ -289,14 +291,16 @@ class MptBlock(nn.Cell):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.norm_1 = nn.LayerNorm(hidden_size, epsilon=config.layer_norm_epsilon, elementwise_affine=False)
+        self.norm_1 = nn.LayerNorm(hidden_size, eps=
+config.layer_norm_epsilon, elementwise_affine=False)
         # backward compatibility with weights on the Hub
         self.norm_1.bias = None
 
         self.num_heads = config.n_heads
         self.attn = MptAttention(config)
 
-        self.norm_2 = nn.LayerNorm(hidden_size, epsilon=config.layer_norm_epsilon, elementwise_affine=False)
+        self.norm_2 = nn.LayerNorm(hidden_size, eps=
+config.layer_norm_epsilon, elementwise_affine=False)
         # backward compatibility with weights on the Hub
         self.norm_2.bias = None
 
@@ -305,7 +309,7 @@ class MptBlock(nn.Cell):
         self.dropout_rate = config.attn_config.attn_pdrop
         self.resid_attn_dropout = nn.Dropout(p=self.dropout_rate)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         position_bias: mindspore.Tensor,
@@ -418,7 +422,7 @@ class MptPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -428,7 +432,7 @@ class MptPreTrainedModel(PreTrainedModel):
             cell.weight.set_data(mindspore.Tensor(weight, cell.weight.dtype))
         elif isinstance(cell, nn.LayerNorm):
             cell.weight.set_data(initializer('ones', cell.weight.shape, cell.weight.dtype))
-            if cell.bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
 
     @staticmethod
@@ -488,10 +492,11 @@ class MptModel(MptPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.hidden_size)
 
         # Transformer blocks
-        self.blocks = nn.CellList([MptBlock(config) for _ in range(config.n_layers)])
+        self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.n_layers)])
 
         # Final Layer Norm
-        self.norm_f = nn.LayerNorm(self.hidden_size, epsilon=config.layer_norm_epsilon, elementwise_affine=False)
+        self.norm_f = nn.LayerNorm(self.hidden_size, eps=
+config.layer_norm_epsilon, elementwise_affine=False)
         # backward compatibility with weights on the Hub
         self.norm_f.bias = None
 
@@ -550,7 +555,7 @@ class MptModel(MptPreTrainedModel):
         """
         self.wte = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -726,7 +731,7 @@ class MptForCausalLM(MptPreTrainedModel):
         """
         super().__init__(config)
         self.transformer = MptModel(config)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -830,7 +835,7 @@ information of the input text, enabling downstream tasks such as text generation
         )
         return model_inputs
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -954,12 +959,12 @@ be in the range of [0, config.num_labels - 1]. If config.num_labels == 1, a regr
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = MptModel(config)
-        self.score = nn.Dense(config.hidden_size, config.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, config.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -1115,7 +1120,7 @@ format.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,
@@ -1204,7 +1209,7 @@ attentions if return_dict is False. If return_dict is True, it returns a Questio
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

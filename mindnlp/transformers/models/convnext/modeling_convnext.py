@@ -17,7 +17,9 @@
 from typing import Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from ...activations import ACT2FN
@@ -69,7 +71,7 @@ def drop_path(input: mindspore.Tensor, drop_prob: float = 0.0, training: bool = 
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNext
-class ConvNextDropPath(nn.Cell):
+class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         """
@@ -89,7 +91,7 @@ class ConvNextDropPath(nn.Cell):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Construct a drop path operation on the hidden states.
         
@@ -123,7 +125,7 @@ class ConvNextDropPath(nn.Cell):
         return "p={}".format(self.drop_prob)
 
 
-class ConvNextLayerNorm(nn.Cell):
+class ConvNextLayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -158,7 +160,7 @@ class ConvNextLayerNorm(nn.Cell):
                                         begin_params_axis=-1,
                                         epsilon=eps)
 
-    def construct(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, x: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the ConvNextLayerNorm.
         
@@ -187,7 +189,7 @@ class ConvNextLayerNorm(nn.Cell):
         return x
 
 
-class ConvNextEmbeddings(nn.Cell):
+class ConvNextEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
@@ -208,12 +210,12 @@ class ConvNextEmbeddings(nn.Cell):
         super().__init__()
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size,
-            pad_mode='valid', has_bias=True
+            pad_mode='valid', bias=True
         )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs embeddings from the input pixel values using the ConvNextEmbeddings class.
         
@@ -239,13 +241,13 @@ class ConvNextEmbeddings(nn.Cell):
         return embeddings
 
 
-class ConvNextLayer(nn.Cell):
+class ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
     H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
 
-    The authors used (2) as they find it slightly faster in PyTorch.
+    The authors used (2) as they find it slightly faster in MindSpore.
 
     Args:
         config ([`ConvNextConfig`]): Model configuration class.
@@ -270,7 +272,7 @@ class ConvNextLayer(nn.Cell):
             TypeError: If config.layer_scale_init_value is not a positive number.
         '''
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, pad_mode='pad', group=dim, has_bias=True)  # depthwise conv
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, pad_mode='pad', group=dim, bias=True)  # depthwise conv
         self.layernorm = ConvNextLayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Dense(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
@@ -282,7 +284,7 @@ class ConvNextLayer(nn.Cell):
         )
         self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         '''
         Construct method in the ConvNextLayer class.
         
@@ -311,7 +313,7 @@ class ConvNextLayer(nn.Cell):
         return x
 
 
-class ConvNextStage(nn.Cell):
+class ConvNextStage(nn.Module):
     """ConvNeXT stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
@@ -347,7 +349,7 @@ class ConvNextStage(nn.Cell):
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.SequentialCell(
                 ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, pad_mode='valid', has_bias=True),
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, pad_mode='valid', bias=True),
             )
         else:
             self.downsampling_layer = nn.Identity()
@@ -356,7 +358,7 @@ class ConvNextStage(nn.Cell):
             *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the next stage of a convolutional neural network.
         
@@ -375,11 +377,11 @@ class ConvNextStage(nn.Cell):
         return hidden_states
 
 
-class ConvNextEncoder(nn.Cell):
+class ConvNextEncoder(nn.Module):
 
     """ConvNextEncoder is a Python class that represents an encoder for a Convolutional Neural Network (CNN) model. 
     
-    This class inherits from the nn.Cell class, which is a base class for all neural network layers in the MindSpore framework.
+    This class inherits from the nn.Module class, which is a base class for all neural network layers in the MindSpore framework.
     
     The ConvNextEncoder class initializes a list of stages, where each stage consists of a ConvNextStage module. The number of stages is defined by the config.num_stages attribute. Each stage performs
 convolutional operations with different parameters, such as input and output channels, stride, and depth. The drop_path_rates parameter specifies the drop path rates for each stage.
@@ -410,7 +412,7 @@ all hidden states.
             None.
         """
         super().__init__()
-        self.stages = nn.CellList()
+        self.stages = nn.ModuleList()
         drop_path_rates = [
             x.tolist() for x in ops.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
@@ -428,7 +430,7 @@ all hidden states.
             self.stages.append(stage)
             prev_chs = out_chs
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         output_hidden_states: Optional[bool] = False,
@@ -527,12 +529,12 @@ outputs as specified in the configuration parameters.
         self.encoder = ConvNextEncoder(config)
 
         # final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], epsilon=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor = None,
         output_hidden_states: Optional[bool] = None,
@@ -639,7 +641,7 @@ and regression. It inherits from the ConvNextPreTrainedModel class.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor = None,
         labels: Optional[mindspore.Tensor] = None,
@@ -747,12 +749,12 @@ on the configuration settings.
         hidden_states_norms = {}
         for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
-        self.hidden_states_norms = nn.CellDict(hidden_states_norms)
+        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
         # initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         output_hidden_states: Optional[bool] = None,

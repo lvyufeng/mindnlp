@@ -232,7 +232,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `mindspore.Tensor` objects.
+                - `'pt'`: Return MindSpore `mindspore.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according

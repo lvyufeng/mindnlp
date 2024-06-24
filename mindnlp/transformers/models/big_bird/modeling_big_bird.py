@@ -20,9 +20,12 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
 from mindspore.common.initializer import initializer, Normal
 
+
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindnlp.utils import (
     ModelOutput,
     logging,
@@ -55,7 +58,7 @@ BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class BigBirdEmbeddings(nn.Cell):
+class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
@@ -88,7 +91,8 @@ class BigBirdEmbeddings(nn.Cell):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -99,7 +103,7 @@ class BigBirdEmbeddings(nn.Cell):
         self.rescale_embeddings = config.rescale_embeddings
         self.hidden_size = config.hidden_size
 
-    def construct(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         '''
@@ -162,13 +166,13 @@ class BigBirdEmbeddings(nn.Cell):
         return embeddings
 
 
-class BigBirdSelfAttention(nn.Cell):
+class BigBirdSelfAttention(nn.Module):
 
     """
     Represents a self-attention mechanism implementation based on the BigBird model.
     This class provides methods for performing self-attention computations in neural networks.
     
-    The 'BigBirdSelfAttention' class inherits from nn.Cell and implements functionalities for self-attention mechanisms.
+    The 'BigBirdSelfAttention' class inherits from nn.Module and implements functionalities for self-attention mechanisms.
     It includes methods for initializing the attention mechanism, swapping axes for attention scores calculations, and constructing the attention mechanism.
     
     Attributes:
@@ -222,9 +226,9 @@ parameters.
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
+        self.query = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
         self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
         self.is_decoder = config.is_decoder
@@ -248,7 +252,7 @@ parameters.
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -347,12 +351,12 @@ parameters.
         return outputs
 
 
-class BigBirdBlockSparseAttention(nn.Cell):
+class BigBirdBlockSparseAttention(nn.Module):
 
     '''
     """A class representing the BigBirdBlockSparseAttention, which is used for implementing block-sparse attention mechanism in neural networks.
     
-    This class inherits from nn.Cell and provides methods for constructing the block-sparse attention mechanism using the BigBird algorithm. 
+    This class inherits from nn.Module and provides methods for constructing the block-sparse attention mechanism using the BigBird algorithm. 
     It includes methods for initializing the attention mechanism, creating random attention masks, and performing block-sparse attention operations.
     
     Attributes:
@@ -415,9 +419,9 @@ class BigBirdBlockSparseAttention(nn.Cell):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.use_bias)
+        self.query = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Dense(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
     def swapaxes_for_scores(self, x):
         """
@@ -438,7 +442,7 @@ class BigBirdBlockSparseAttention(nn.Cell):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         band_mask=None,
@@ -1382,13 +1386,13 @@ class BigBirdBlockSparseAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BigBird
-class BigBirdSelfOutput(nn.Cell):
+class BigBirdSelfOutput(nn.Module):
 
     """
     This class represents the self-output layer for the BigBird model. It applies dense transformation, layer normalization, and dropout to the input hidden states, and then adds the input tensor to the
 normalized hidden states.
     
-    This class inherits from nn.Cell and includes an __init__ method for initialization and a construct method for performing the self-output transformation.
+    This class inherits from nn.Module and includes an __init__ method for initialization and a construct method for performing the self-output transformation.
     
     The __init__ method initializes the dense transformation, layer normalization, and dropout layers with the given configuration parameters.
     
@@ -1416,10 +1420,11 @@ returns the resulting hidden states.
         """
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output of the BigBird self-attention layer.
         
@@ -1444,10 +1449,10 @@ returns the resulting hidden states.
         return hidden_states
 
 
-class BigBirdAttention(nn.Cell):
+class BigBirdAttention(nn.Module):
 
     """
-    This class represents the BigBirdAttention module, which is used for attention computation in the BigBird model. It is a subclass of the nn.Cell class.
+    This class represents the BigBirdAttention module, which is used for attention computation in the BigBird model. It is a subclass of the nn.Module class.
     
     Attributes:
         - attention_type (str): The type of attention used in the module. It can be either 'original_full' or 'block_sparse'.
@@ -1532,7 +1537,7 @@ from_mask=None, to_mask=None, from_blocked_mask=None, to_blocked_mask=None): Com
         if not self.training:
             self.self.set_train(False)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1602,12 +1607,12 @@ from_mask=None, to_mask=None, from_blocked_mask=None, to_blocked_mask=None): Com
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BigBird
-class BigBirdIntermediate(nn.Cell):
+class BigBirdIntermediate(nn.Module):
 
     """
     This class represents the intermediate layer of the BigBird model, which is used for processing hidden states.
     
-    The BigBirdIntermediate class inherits from the nn.Cell class and implements the following methods:
+    The BigBirdIntermediate class inherits from the nn.Module class and implements the following methods:
     
     - __init__(self, config):
         Initializes an instance of the BigBirdIntermediate class.
@@ -1646,7 +1651,7 @@ class BigBirdIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         The 'construct' method in the 'BigBirdIntermediate' class applies transformations to the input hidden states.
         
@@ -1666,10 +1671,10 @@ class BigBirdIntermediate(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BigBird
-class BigBirdOutput(nn.Cell):
+class BigBirdOutput(nn.Module):
 
     """
-    This class represents the output layer of the BigBird model. It inherits from the nn.Cell class.
+    This class represents the output layer of the BigBird model. It inherits from the nn.Module class.
     
     The BigBirdOutput class applies various transformations to the input hidden states and produces the final output tensor.
     
@@ -1703,10 +1708,11 @@ class BigBirdOutput(nn.Cell):
         """
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the output of the BigBird model.
         
@@ -1730,10 +1736,10 @@ class BigBirdOutput(nn.Cell):
         return hidden_states
 
 
-class BigBirdLayer(nn.Cell):
+class BigBirdLayer(nn.Module):
 
     """
-    This class represents a layer of the BigBird model, which is used for attention-based computations. It inherits from the nn.Cell class.
+    This class represents a layer of the BigBird model, which is used for attention-based computations. It inherits from the nn.Module class.
     
     Attributes:
     - config: An object that stores the configuration settings for the BigBirdLayer.
@@ -1819,7 +1825,7 @@ without making any changes. Otherwise, the attention type is updated, and the se
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1942,12 +1948,12 @@ without making any changes. Otherwise, the attention type is updated, and the se
         return layer_output
 
 
-class BigBirdEncoder(nn.Cell):
+class BigBirdEncoder(nn.Module):
 
     """
     BigBirdEncoder represents an encoder module for the BigBird model.
     
-    This class inherits from nn.Cell and includes methods to initialize the encoder, set attention type, and construct the encoder with various input parameters and return options.
+    This class inherits from nn.Module and includes methods to initialize the encoder, set attention type, and construct the encoder with various input parameters and return options.
     
     The 'construct' method processes the input hidden states and optional masks, producing hidden states, attentions, and cross-attentions based on the configuration and layer operations.
     
@@ -1990,7 +1996,7 @@ class BigBirdEncoder(nn.Cell):
         self.config = config
         self.attention_type = config.attention_type
 
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
@@ -2025,7 +2031,7 @@ is the same as the current attention type, the method does nothing.
         for layer in self.layer:
             layer.set_attention_type(value)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -2136,12 +2142,12 @@ the 'return_dict' flag.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->BigBird
-class BigBirdPredictionHeadTransform(nn.Cell):
+class BigBirdPredictionHeadTransform(nn.Module):
 
     """
     This class represents the transformation module used in the BigBirdPredictionHead model. It is responsible for applying a series of transformations to the input hidden states.
     
-    The 'BigBirdPredictionHeadTransform' class inherits from the 'nn.Cell' class.
+    The 'BigBirdPredictionHeadTransform' class inherits from the 'nn.Module' class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that maps the input hidden states to the same hidden size.
@@ -2177,9 +2183,10 @@ class BigBirdPredictionHeadTransform(nn.Cell):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the BigBirdPredictionHeadTransform.
         
@@ -2204,12 +2211,12 @@ class BigBirdPredictionHeadTransform(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->BigBird
-class BigBirdLMPredictionHead(nn.Cell):
+class BigBirdLMPredictionHead(nn.Module):
 
     """
     This class represents a prediction head for a BigBird Language Model (LM). It includes a transformer for processing hidden states 
     and a decoder for generating predictions based on the transformed states. The decoder does not have bias and utilizes a custom bias parameter.
-    The class inherits from nn.Cell and provides a 'construct' method to perform the transformation and decoding of hidden states.
+    The class inherits from nn.Module and provides a 'construct' method to perform the transformation and decoding of hidden states.
     
     Attributes:
         - transform: An instance of BigBirdPredictionHeadTransform used to transform hidden states.
@@ -2240,14 +2247,14 @@ class BigBirdLMPredictionHead(nn.Cell):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = Parameter(ops.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states for the BigBirdLMPredictionHead.
         
@@ -2278,12 +2285,12 @@ then returned.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->BigBird
-class BigBirdOnlyMLMHead(nn.Cell):
+class BigBirdOnlyMLMHead(nn.Module):
 
     """
     This class represents the BigBirdOnlyMLMHead, which is responsible for generating prediction scores for masked language modeling (MLM) tasks using the BigBird transformer model.
     
-    The BigBirdOnlyMLMHead class inherits from the nn.Cell class.
+    The BigBirdOnlyMLMHead class inherits from the nn.Module class.
     
     Example:
         config = BigBirdConfig(...)
@@ -2330,7 +2337,7 @@ class BigBirdOnlyMLMHead(nn.Cell):
         super().__init__()
         self.predictions = BigBirdLMPredictionHead(config)
 
-    def construct(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
         """Constructs the masked language model head for the BigBirdOnlyMLMHead class.
         
         Args:
@@ -2352,11 +2359,11 @@ class BigBirdOnlyMLMHead(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->BigBird
-class BigBirdOnlyNSPHead(nn.Cell):
+class BigBirdOnlyNSPHead(nn.Module):
 
     """
     This class represents a BigBird Only Next Sentence Prediction (NSP) Head, which is used in natural language processing tasks.
-    It inherits from the `nn.Cell` class provided by the MindSpore framework.
+    It inherits from the `nn.Module` class provided by the MindSpore framework.
     
     The BigBirdOnlyNSPHead class contains methods for initializing and constructing the NSP head.
     
@@ -2397,7 +2404,7 @@ class BigBirdOnlyNSPHead(nn.Cell):
         super().__init__()
         self.seq_relationship = nn.Dense(config.hidden_size, 2)
 
-    def construct(self, pooled_output):
+    def forward(self, pooled_output):
         """
         This method constructs a BigBirdOnlyNSPHead by calculating the sequence relationship score based on the pooled output.
         
@@ -2416,12 +2423,12 @@ class BigBirdOnlyNSPHead(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->BigBird
-class BigBirdPreTrainingHeads(nn.Cell):
+class BigBirdPreTrainingHeads(nn.Module):
 
     """
     The BigBirdPreTrainingHeads class represents the pre-training heads for the BigBird model. 
     It includes methods for predicting masked tokens and determining sequence relationships. 
-    This class inherits from nn.Cell and contains the necessary components for pre-training tasks in the BigBird model.
+    This class inherits from nn.Module and contains the necessary components for pre-training tasks in the BigBird model.
     """
     def __init__(self, config):
         """
@@ -2444,7 +2451,7 @@ class BigBirdPreTrainingHeads(nn.Cell):
         self.predictions = BigBirdLMPredictionHead(config)
         self.seq_relationship = nn.Dense(config.hidden_size, 2)
 
-    def construct(self, sequence_output, pooled_output):
+    def forward(self, sequence_output, pooled_output):
         """
         Construct the prediction and relation scores for the BigBirdPreTrainingHeads model.
         
@@ -2482,7 +2489,7 @@ class BigBirdPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -2496,8 +2503,8 @@ class BigBirdPreTrainedModel(PreTrainedModel):
 
 
 BIG_BIRD_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Cell](https://pytorch.org/docs/stable/nn.html#torch.nn.Cell) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    This model is a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage and
     behavior.
 
     Parameters:
@@ -2743,7 +2750,7 @@ The 'value' parameter should be an instance of a compatible embedding object.
         self.attention_type = value
         self.encoder.set_attention_type(value)
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3112,7 +3119,7 @@ prediction loss if labels are provided, and returns the pre-training outputs. An
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3295,7 +3302,7 @@ for generation.
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3520,7 +3527,7 @@ output_attentions, output_hidden_states, return_dict): Constructs the model for 
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3670,7 +3677,7 @@ output_attentions, output_hidden_states, return_dict): Constructs the model for 
         return reordered_past
 
 
-class BigBirdClassificationHead(nn.Cell):
+class BigBirdClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
     def __init__(self, config):
         """
@@ -3704,7 +3711,7 @@ class BigBirdClassificationHead(nn.Cell):
 
         self.config = config
 
-    def construct(self, features, **kwargs):
+    def forward(self, features, **kwargs):
         """
         Constructs the BigBird classification head.
         
@@ -3768,7 +3775,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3913,7 +3920,7 @@ tasks.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -4026,7 +4033,7 @@ loss, logits, hidden states, and attentions.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -4078,7 +4085,7 @@ loss, logits, hidden states, and attentions.
         )
 
 
-class BigBirdForQuestionAnsweringHead(nn.Cell):
+class BigBirdForQuestionAnsweringHead(nn.Module):
     """Head for question answering tasks."""
     def __init__(self, config):
         """
@@ -4100,7 +4107,7 @@ class BigBirdForQuestionAnsweringHead(nn.Cell):
         self.output = BigBirdOutput(config)
         self.qa_outputs = nn.Dense(config.hidden_size, config.num_labels)
 
-    def construct(self, encoder_output):
+    def forward(self, encoder_output):
         """
         Constructs the question-answering head for the BigBird model.
         
@@ -4197,7 +4204,7 @@ return_dict)`: Constructs the model for question answering.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

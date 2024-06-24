@@ -25,7 +25,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from ...activations import ACT2FN
@@ -52,7 +54,7 @@ def load_balancing_loss_func(
         gate_logits: mindspore.Tensor, num_experts: mindspore.Tensor = None, top_k=2, attention_mask: Optional[mindspore.Tensor] = None
 ) -> float:
     r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in MindSpore.
 
     See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
@@ -151,10 +153,10 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Jamba
-class JambaRMSNorm(nn.Cell):
+class JambaRMSNorm(nn.Module):
 
     """
-    The 'JambaRMSNorm' class represents a layer normalization module equivalent to T5LayerNorm. It inherits from nn.Cell and includes methods for initialization and construction. The class provides
+    The 'JambaRMSNorm' class represents a layer normalization module equivalent to T5LayerNorm. It inherits from nn.Module and includes methods for initialization and construction. The class provides
 functionality for normalizing input hidden states using the RMS normalization technique, with the ability to specify the hidden size and epsilon value for variance stabilization.
     
     Attributes:
@@ -176,7 +178,7 @@ functionality for normalizing input hidden states using the RMS normalization te
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the JambaRMSNorm layer.
         
@@ -212,7 +214,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
 
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Jamba
-class JambaAttention(nn.Cell):
+class JambaAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -256,10 +258,10 @@ this class.
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=False)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -279,7 +281,7 @@ this class.
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -523,7 +525,7 @@ class MambaCacheParams:
 
 
 # Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
-class JambaMambaMixer(nn.Cell):
+class JambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
@@ -558,7 +560,7 @@ class JambaMambaMixer(nn.Cell):
         self.conv1d = nn.Conv1d(
             in_channels=self.intermediate_size,
             out_channels=self.intermediate_size,
-            has_bias=self.use_conv_bias,
+            bias=self.use_conv_bias,
             kernel_size=self.conv_kernel_size,
             group=self.intermediate_size,
             padding=self.conv_kernel_size - 1,
@@ -572,11 +574,11 @@ class JambaMambaMixer(nn.Cell):
         self.use_fast_kernels = config.use_mamba_kernels
 
         # projection of the input hidden states
-        self.in_proj = nn.Dense(self.hidden_size, self.intermediate_size * 2, has_bias=self.use_bias)
+        self.in_proj = nn.Dense(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
         # selective projection used to make dt, B and C input dependant
-        self.x_proj = nn.Dense(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, has_bias=False)
+        self.x_proj = nn.Dense(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
-        self.dt_proj = nn.Dense(self.time_step_rank, self.intermediate_size, has_bias=True)
+        self.dt_proj = nn.Dense(self.time_step_rank, self.intermediate_size, bias=True)
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -585,7 +587,7 @@ class JambaMambaMixer(nn.Cell):
 
         self.A_log = Parameter(ops.log(A))
         self.D = Parameter(ops.ones(self.intermediate_size))
-        self.out_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=self.use_bias)
+        self.out_proj = nn.Dense(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
         if self.apply_inner_layernorms:
             self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
@@ -713,7 +715,7 @@ class JambaMambaMixer(nn.Cell):
         contextualized_states = self.out_proj(scan_output.swapaxes(1, 2))             # [batch, seq_len, hidden_size]
         return contextualized_states
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -779,10 +781,10 @@ class JambaMambaMixer(nn.Cell):
         return res, past_key_value
 
 
-class JambaMLP(nn.Cell):
+class JambaMLP(nn.Module):
 
     """
-    JambaMLP represents a multi-layer perceptron (MLP) model used in the Jamba project. It inherits from nn.Cell.
+    JambaMLP represents a multi-layer perceptron (MLP) model used in the Jamba project. It inherits from nn.Module.
     
     This class implements the construction and initialization of the JambaMLP model. The model consists of three linear layers: gate_proj, down_proj, and up_proj. The activation function used in the hidden
 layer is determined by the hidden_act parameter in the JambaConfig object.
@@ -827,13 +829,13 @@ layer is determined by the hidden_act parameter in the JambaConfig object.
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
 
-        self.gate_proj = nn.Dense(self.hidden_dim, self.ffn_dim, has_bias=False)
-        self.down_proj = nn.Dense(self.ffn_dim, self.hidden_dim, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_dim, self.ffn_dim, has_bias=False)
+        self.gate_proj = nn.Dense(self.hidden_dim, self.ffn_dim, bias=False)
+        self.down_proj = nn.Dense(self.ffn_dim, self.hidden_dim, bias=False)
+        self.up_proj = nn.Dense(self.hidden_dim, self.ffn_dim, bias=False)
 
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
 
         """
         Constructs a new feature representation using the JambaMLP model.
@@ -854,7 +856,7 @@ layer is determined by the hidden_act parameter in the JambaConfig object.
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralSparseMoeBlock with Mistral->Jamba
-class JambaSparseMoeBlock(nn.Cell):
+class JambaSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -892,13 +894,13 @@ class JambaSparseMoeBlock(nn.Cell):
 
         if num_experts > 1:
             # expert routing
-            self.router = nn.Dense(self.hidden_dim, self.num_experts, has_bias=False)
+            self.router = nn.Dense(self.hidden_dim, self.num_experts, bias=False)
         else:
             self.router = None
 
-        self.experts = nn.CellList([JambaMLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([JambaMLP(config) for _ in range(self.num_experts)])
 
-    def construct(self, hidden_states: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
+    def forward(self, hidden_states: mindspore.Tensor) -> Tuple[mindspore.Tensor, mindspore.Tensor]:
 
         '''
         Constructs a JambaSparseMoeBlock.
@@ -964,7 +966,7 @@ the router logits have a shape of (batch_size * sequence_length, 1).
         return final_hidden_states, router_logits
 
 
-class JambaAttentionDecoderLayer(nn.Cell):
+class JambaAttentionDecoderLayer(nn.Module):
 
     """
     This class represents an attention decoder layer in the Jamba model for natural language processing tasks. 
@@ -998,7 +1000,7 @@ class JambaAttentionDecoderLayer(nn.Cell):
         self.input_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_moe_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1097,12 +1099,12 @@ class JambaAttentionDecoderLayer(nn.Cell):
         return outputs
 
 
-class JambaMambaDecoderLayer(nn.Cell):
+class JambaMambaDecoderLayer(nn.Module):
 
     """
     This class represents a decoder layer for Jamba Mamba model, implementing the logic for processing input sequences in a transformer architecture.
     
-    Inherits from the nn.Cell class, this decoder layer consists of components such as JambaMambaMixer, JambaSparseMoeBlock, JambaRMSNorm, and implements methods for processing hidden states, attention masks,
+    Inherits from the nn.Module class, this decoder layer consists of components such as JambaMambaMixer, JambaSparseMoeBlock, JambaRMSNorm, and implements methods for processing hidden states, attention masks,
 and past key-value states.
     
     Attributes:
@@ -1151,7 +1153,7 @@ cache values.
         self.input_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_moe_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1321,7 +1323,7 @@ for converting cache formats between standard and Jamba formats.
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(std),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -1438,7 +1440,7 @@ class JambaModel(JambaPreTrainedModel):
         ):
             raise ValueError("Mamba state size and convolution size must be different")
 
-        self.layers = nn.CellList(decoder_layers)
+        self.layers = nn.ModuleList(decoder_layers)
 
         self.final_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1484,7 +1486,7 @@ class JambaModel(JambaPreTrainedModel):
         self.embed_tokens = value
 
     # Ignore copy
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1703,7 +1705,7 @@ updating the position ids.
         super().__init__(config)
         self.model = JambaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_experts
         self.num_experts_per_tok = config.num_experts_per_tok
@@ -1811,7 +1813,7 @@ updating the position ids.
         return self.model
 
     # Ignore copy
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -2058,7 +2060,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = JambaModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2097,7 +2099,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             attention_mask: Optional[mindspore.Tensor] = None,

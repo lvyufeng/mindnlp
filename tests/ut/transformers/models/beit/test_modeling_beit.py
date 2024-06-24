@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BEiT model. """
+""" Testing suite for the MindSpore BEiT model. """
 
 
 import unittest
@@ -33,7 +33,8 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 
 if is_mindspore_available():
     import mindspore
-    from mindspore import nn, ops
+    from mindspore import ops
+    from mindnlp.core import nn
 
     from mindnlp.transformers import (
         BeitBackbone,
@@ -51,7 +52,6 @@ if is_vision_available():
     from PIL import Image
 
     from mindnlp.transformers import BeitImageProcessor
-
 
 class BeitModelTester:
     def __init__(
@@ -271,7 +271,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Cell))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Dense))
 
@@ -341,7 +341,7 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
                 if param.requires_grad:
                     self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        ((param.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )

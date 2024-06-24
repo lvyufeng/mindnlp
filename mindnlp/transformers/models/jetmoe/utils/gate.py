@@ -15,14 +15,16 @@
 """
 JetMoE Gate.
 """
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindnlp.modules.functional import normalize
 
-class top_k_gating(nn.Cell):
+class top_k_gating(nn.Module):
 
     """
     This class represents a top-k gating mechanism for selecting a subset of experts based on input logits. The gating mechanism uses the top-k experts to make predictions and can be used for model ensembling
-or expert selection. The class inherits from nn.Cell and implements methods for initializing the mechanism, computing auxiliary loss, and constructing the top-k gating for input data. Additionally, the class
+or expert selection. The class inherits from nn.Module and implements methods for initializing the mechanism, computing auxiliary loss, and constructing the top-k gating for input data. Additionally, the class
 provides a method for returning an extra representation string for the module.
     
     The top_k_gating class provides the following methods:
@@ -61,7 +63,7 @@ provides a method for returning an extra representation string for the module.
         assert top_k <= num_experts
         self.top_k = top_k
 
-        self.layer = nn.Dense(input_size, num_experts, has_bias=False)
+        self.layer = nn.Dense(input_size, num_experts, bias=False)
 
     def extra_repr(self):
         """
@@ -90,7 +92,7 @@ provides a method for returning an extra representation string for the module.
 
         return loss
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Compute the top-k gating for the input.
 

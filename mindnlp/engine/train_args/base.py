@@ -57,7 +57,7 @@ if is_mindspore_available():
 
 def default_logdir() -> str:
     """
-    Same default as PyTorch
+    Same default as MindSpore
     """
     import socket
     from datetime import datetime

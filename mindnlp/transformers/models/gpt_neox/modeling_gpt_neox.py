@@ -19,7 +19,9 @@ from typing import Optional, Tuple, Union
 from functools import partial
 import numpy as np
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 from mindnlp.utils import logging, get_default_dtype
 
@@ -92,7 +94,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(sigma=self.config.initializer_range, mean=0.0),
                                              cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = initializer(Normal(sigma=self.config.initializer_range, mean=0.0),
@@ -147,7 +149,7 @@ GPTNeoXModel class.
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
 
-class GPTNeoXAttention(nn.Cell):
+class GPTNeoXAttention(nn.Module):
     """GPTNeoXAttention"""
     def __init__(self, config):
         """
@@ -182,8 +184,8 @@ class GPTNeoXAttention(nn.Cell):
         self._init_rope()
 
         self.norm_factor = self.head_size ** -0.5
-        self.query_key_value = nn.Dense(config.hidden_size, 3 * config.hidden_size, has_bias=config.attention_bias)
-        self.dense = nn.Dense(config.hidden_size, config.hidden_size, has_bias=config.attention_bias)
+        self.query_key_value = nn.Dense(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
+        self.dense = nn.Dense(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.attention_dropout = nn.Dropout(p=config.attention_dropout)
         self.is_causal = True
 
@@ -242,7 +244,7 @@ class GPTNeoXAttention(nn.Cell):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: mindspore.Tensor,
@@ -422,7 +424,7 @@ def attention_mask_func(attention_scores, ltor_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaRotary->GPTNeoXRotary
-class GPTNeoXRotaryEmbedding(nn.Cell):
+class GPTNeoXRotaryEmbedding(nn.Module):
     """GPTNeoXRotaryEmbedding"""
     def __init__(self, dim, max_position_embeddings=2048, base=10000):
         """
@@ -477,7 +479,7 @@ class GPTNeoXRotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos()
         self.sin_cached = emb.sin()
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs the rotary embeddings for the GPTNeoX model.
         
@@ -657,7 +659,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class GPTNeoXMLP(nn.Cell):
+class GPTNeoXMLP(nn.Module):
     """GPTNeoXMLP"""
     def __init__(self, config):
         """
@@ -680,7 +682,7 @@ class GPTNeoXMLP(nn.Cell):
         self.dense_4h_to_h = nn.Dense(config.intermediate_size, config.hidden_size)
         self.act = ACT2FN[config.hidden_act]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states using the specified operations.
         
@@ -705,7 +707,7 @@ GPT_NEOX_ATTENTION_CLASSES = {
 }
 
 
-class GPTNeoXLayer(nn.Cell):
+class GPTNeoXLayer(nn.Module):
     """GPTNeoXLayer"""
     def __init__(self, config):
         """
@@ -730,15 +732,15 @@ class GPTNeoXLayer(nn.Cell):
         """
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
-        self.input_layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(p=config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(p=config.hidden_dropout)
         # self.attention = GPT_NEOX_ATTENTION_CLASSES[config._attn_implementation](config)
         self.attention = GPT_NEOX_ATTENTION_CLASSES["eager"](config)
         self.mlp = GPTNeoXMLP(config)
 
-    def construct(
+    def forward(
             self,
             hidden_states: Optional[mindspore.Tensor],
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -824,8 +826,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
-        self.final_layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
+        self.final_layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         # Not support flash_attention_2
         # self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_flash_attention_2 = False
@@ -867,7 +869,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         """
         self.embed_in = new_embeddings
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1033,7 +1035,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         super().__init__(config)
 
         self.gpt_neox = GPTNeoXModel(config)
-        self.embed_out = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.embed_out = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1072,7 +1074,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         """
         self.embed_out = new_embeddings
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1254,12 +1256,12 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.gpt_neox = GPTNeoXModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1382,7 +1384,7 @@ of labels from the configuration. Finally, the post_init() method is called for 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             past_key_values: Optional[Tuple[Tuple[mindspore.Tensor]]] = None,
@@ -1465,7 +1467,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
             self,
             input_ids: Optional[mindspore.Tensor] = None,
             attention_mask: Optional[mindspore.Tensor] = None,

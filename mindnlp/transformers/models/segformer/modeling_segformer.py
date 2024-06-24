@@ -18,7 +18,9 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal
 
 from ...activations import ACT2FN
@@ -92,7 +94,7 @@ def drop_path(input: mindspore.Tensor, drop_prob: float = 0.0, training: bool = 
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->Segformer
-class SegformerDropPath(nn.Cell):
+class SegformerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         """
@@ -112,7 +114,7 @@ class SegformerDropPath(nn.Cell):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a drop path operation on the hidden states.
         
@@ -149,7 +151,7 @@ class SegformerDropPath(nn.Cell):
         return "p={}".format(self.drop_prob)
 
 
-class SegformerOverlapPatchEmbeddings(nn.Cell):
+class SegformerOverlapPatchEmbeddings(nn.Module):
     """Construct the overlapping patch embeddings."""
     def __init__(self, patch_size, stride, num_channels, hidden_size):
         """Initialize the SegformerOverlapPatchEmbeddings class.
@@ -175,12 +177,12 @@ class SegformerOverlapPatchEmbeddings(nn.Cell):
             stride=stride,
             padding=patch_size // 2,
             pad_mode='pad',
-            has_bias=True
+            bias=True
         )
 
         self.layer_norm = nn.LayerNorm(hidden_size)
 
-    def construct(self, pixel_values):
+    def forward(self, pixel_values):
         """
         Constructs the overlap patch embeddings for the input pixel values.
         
@@ -210,7 +212,7 @@ class SegformerOverlapPatchEmbeddings(nn.Cell):
         return embeddings, height, width
 
 
-class SegformerEfficientSelfAttention(nn.Cell):
+class SegformerEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://arxiv.org/abs/2102.12122)."""
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
@@ -252,7 +254,7 @@ class SegformerEfficientSelfAttention(nn.Cell):
         self.sr_ratio = sequence_reduction_ratio
         if sequence_reduction_ratio > 1:
             self.sr = nn.Conv2d(
-                hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio, pad_mode='valid', has_bias=True
+                hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio, pad_mode='valid', bias=True
             )
             self.layer_norm = nn.LayerNorm(hidden_size)
 
@@ -274,7 +276,7 @@ class SegformerEfficientSelfAttention(nn.Cell):
         hidden_states = hidden_states.view(new_shape)
         return hidden_states.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         height,
@@ -337,11 +339,11 @@ class SegformerEfficientSelfAttention(nn.Cell):
         return outputs
 
 
-class SegformerSelfOutput(nn.Cell):
+class SegformerSelfOutput(nn.Module):
 
     """
     This class represents the self-output of a segmenter transformer model (Segformer) in a neural network architecture. 
-    It inherits from the nn.Cell class.
+    It inherits from the nn.Module class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that applies linear transformation to the input hidden states.
@@ -387,7 +389,7 @@ prevent overfitting.
         self.dense = nn.Dense(hidden_size, hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor):
         """
         Constructs the output of the SegformerSelfOutput class.
         
@@ -407,10 +409,10 @@ prevent overfitting.
         return hidden_states
 
 
-class SegformerAttention(nn.Cell):
+class SegformerAttention(nn.Module):
 
     """
-    This class represents the attention mechanism used in the Segformer model. It inherits from the `nn.Cell` class.
+    This class represents the attention mechanism used in the Segformer model. It inherits from the `nn.Module` class.
     
     Attributes:
         self (SegformerEfficientSelfAttention): Instance of the SegformerEfficientSelfAttention class that handles self-attention computations.
@@ -517,7 +519,7 @@ class SegformerAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(self, hidden_states, height, width, output_attentions=False):
+    def forward(self, hidden_states, height, width, output_attentions=False):
         """
             Construct the attention output of the SegformerAttention module.
         
@@ -543,10 +545,10 @@ class SegformerAttention(nn.Cell):
         return outputs
 
 
-class SegformerDWConv(nn.Cell):
+class SegformerDWConv(nn.Module):
 
     """
-    The SegformerDWConv class represents a depthwise separable convolutional layer for segmentation tasks. This class inherits from the nn.Cell module.
+    The SegformerDWConv class represents a depthwise separable convolutional layer for segmentation tasks. This class inherits from the nn.Module module.
     
     Attributes:
         dim (int): The dimensionality of the input and output channels for the depthwise separable convolution.
@@ -579,9 +581,9 @@ class SegformerDWConv(nn.Cell):
             RuntimeError: If an error occurs during the initialization process.
         """
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, pad_mode='pad', padding=1, has_bias=True, group=dim)
+        self.dwconv = nn.Conv2d(dim, dim, 3, 1, pad_mode='pad', padding=1, bias=True, group=dim)
 
-    def construct(self, hidden_states, height, width):
+    def forward(self, hidden_states, height, width):
         """
         Constructs the SegformerDWConv.
         
@@ -605,12 +607,12 @@ class SegformerDWConv(nn.Cell):
         return hidden_states
 
 
-class SegformerMixFFN(nn.Cell):
+class SegformerMixFFN(nn.Module):
 
     """
     The SegformerMixFFN class represents a feed-forward neural network (FFN) module for the Segformer architecture. 
     It is designed to process input features and generate output features using dense layers, depthwise convolution, activation functions, and dropout regularization. 
-    The class inherits from nn.Cell and provides methods for initializing the module and constructing the FFN computation graph.
+    The class inherits from nn.Module and provides methods for initializing the module and constructing the FFN computation graph.
     
     Attributes:
         config (object): The configuration object containing parameters for the FFN module.
@@ -657,7 +659,7 @@ class SegformerMixFFN(nn.Cell):
         self.dense2 = nn.Dense(hidden_features, out_features)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states, height, width):
+    def forward(self, hidden_states, height, width):
         '''
         This method constructs the feed-forward network for the SegformerMixFFN class.
         
@@ -682,7 +684,7 @@ class SegformerMixFFN(nn.Cell):
         return hidden_states
 
 
-class SegformerLayer(nn.Cell):
+class SegformerLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
     def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):
         """
@@ -716,7 +718,7 @@ class SegformerLayer(nn.Cell):
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
-    def construct(self, hidden_states, height, width, output_attentions=False):
+    def forward(self, hidden_states, height, width, output_attentions=False):
         """
         This method constructs a Segformer layer by performing self-attention and multi-layer perceptron (mlp) operations.
         
@@ -758,14 +760,14 @@ class SegformerLayer(nn.Cell):
         return outputs
 
 
-class SegformerEncoder(nn.Cell):
+class SegformerEncoder(nn.Module):
 
     """
     SegformerEncoder is a neural network module that represents the encoder of the Segformer model. It takes input pixel values and produces a sequence of hidden states that can be used for various downstream
 tasks.
     
     Inherits from:
-        nn.Cell
+        nn.Module
     
     Args:
         config: An instance of SegformerConfig that contains various hyperparameters for the encoder.
@@ -822,7 +824,7 @@ tasks.
                     hidden_size=config.hidden_sizes[i],
                 )
             )
-        self.patch_embeddings = nn.CellList(embeddings)
+        self.patch_embeddings = nn.ModuleList(embeddings)
 
         # Transformer blocks
         blocks = []
@@ -843,16 +845,16 @@ tasks.
                         mlp_ratio=config.mlp_ratios[i],
                     )
                 )
-            blocks.append(nn.CellList(layers))
+            blocks.append(nn.ModuleList(layers))
 
-        self.block = nn.CellList(blocks)
+        self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.CellList(
+        self.layer_norm = nn.ModuleList(
             [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
         )
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         output_attentions: Optional[bool] = False,
@@ -997,7 +999,7 @@ attention maps and hidden states.
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         output_attentions: Optional[bool] = None,
@@ -1124,7 +1126,7 @@ attentions.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         labels: Optional[mindspore.Tensor] = None,
@@ -1192,7 +1194,7 @@ attentions.
         )
 
 
-class SegformerMLP(nn.Cell):
+class SegformerMLP(nn.Module):
     """
     Linear Embedding.
     """
@@ -1216,7 +1218,7 @@ class SegformerMLP(nn.Cell):
         super().__init__()
         self.proj = nn.Dense(input_dim, config.decoder_hidden_size)
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         """
         Constructs the SegformerMLP.
         
@@ -1243,7 +1245,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
     This class contains methods for constructing the decoding head and generating logits for semantic segmentation. 
     
     Attributes:
-        linear_c (nn.CellList): A list of MLP (Multi-Layer Perceptron) modules for each encoder block.
+        linear_c (nn.ModuleList): A list of MLP (Multi-Layer Perceptron) modules for each encoder block.
         linear_fuse (nn.Conv2d): A convolutional layer used for fusing the hidden states of all encoder blocks.
         batch_norm (nn.BatchNorm2d): A batch normalization layer applied to the fused hidden states.
         activation (nn.ReLU): An activation function applied to the hidden states.
@@ -1290,25 +1292,25 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
         for i in range(config.num_encoder_blocks):
             mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
             mlps.append(mlp)
-        self.linear_c = nn.CellList(mlps)
+        self.linear_c = nn.ModuleList(mlps)
 
         # the following 3 layers implement the ConvModule of the original implementation
         self.linear_fuse = nn.Conv2d(
             in_channels=config.decoder_hidden_size * config.num_encoder_blocks,
             out_channels=config.decoder_hidden_size,
             kernel_size=1,
-            has_bias=False,
+            bias=False,
             pad_mode='valid'
         )
         self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
         self.activation = nn.ReLU()
 
         self.dropout = nn.Dropout(p=config.classifier_dropout_prob)
-        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1, pad_mode='valid', has_bias=True)
+        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1, pad_mode='valid', bias=True)
 
         self.config = config
 
-    def construct(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, encoder_hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         ''' 
         Constructs the decode head for Segformer.
         
@@ -1433,7 +1435,7 @@ is computed (Cross-Entropy).
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         labels: Optional[mindspore.Tensor] = None,

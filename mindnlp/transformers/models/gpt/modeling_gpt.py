@@ -21,7 +21,9 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import (
@@ -47,10 +49,10 @@ OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ACT_FNS = {"relu": ops.relu, "silu": silu, "gelu": gelu_new, "swish": silu}
 
 
-class Attention(nn.Cell):
+class Attention(nn.Module):
 
     """
-    This class represents an attention mechanism used in neural networks. It is designed to be used as a part of a larger model and inherits from the nn.Cell class.
+    This class represents an attention mechanism used in neural networks. It is designed to be used as a part of a larger model and inherits from the nn.Module class.
     
     Attributes:
         - bias (Tensor): A tensor representing the bias used in the attention computation.
@@ -235,7 +237,7 @@ function returns a tensor with shape (batch_size, seq_len, n_head, d_model/n_hea
             return x.permute(0, 2, 3, 1)
         return x.permute(0, 2, 1, 3)
 
-    def construct(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         """
         This method 'construct' in the class 'Attention' processes the input data 'x' through attention mechanisms.
         
@@ -271,13 +273,13 @@ function returns a tensor with shape (batch_size, seq_len, n_head, d_model/n_hea
         return outputs  # a, (attentions)
 
 
-class MLP(nn.Cell):
+class MLP(nn.Module):
 
     """ 
     MLP is a class that represents a multi-layer perceptron (MLP) model.
     
     MLP is a neural network model that consists of multiple layers of perceptrons or artificial neurons. Each layer is fully connected to the next layer, and the final layer produces the output. The MLP class
-inherits from the nn.Cell class, which is a base class for all neural network modules in the PyTorch framework.
+inherits from the nn.Module class, which is a base class for all neural network modules in the MindSpore framework.
     
     The MLP class has the following attributes:
     - n_state: an integer representing the number of output channels in the first convolutional layer.
@@ -285,7 +287,7 @@ inherits from the nn.Cell class, which is a base class for all neural network mo
     
     The MLP class has the following methods:
     - __init__(self, n_state, config): Initializes the MLP object. It takes two parameters: n_state, which represents the number of output channels in the first convolutional layer, and config, which is an
-object containing configuration parameters for the MLP model. Inside the method, it initializes the parent class (nn.Cell), sets the number of input channels (nx) to the value specified in the config, creates
+object containing configuration parameters for the MLP model. Inside the method, it initializes the parent class (nn.Module), sets the number of input channels (nx) to the value specified in the config, creates
 a 1-dimensional convolutional layer (self.c_fc) with n_state output channels and nx input channels, creates another 1-dimensional convolutional layer (self.c_proj) with nx output channels and n_state input
 channels, sets the activation function (self.act) to the value specified in the config, and sets the dropout probability (self.dropout) to the value specified in the config.
     - construct(self, x): Constructs the MLP model. It takes one parameter, x, which represents the input tensor. Inside the method, it applies the activation function to the output of the first convolutional
@@ -321,7 +323,7 @@ layer (self.c_fc), applies the second convolutional layer (self.c_proj) to the r
         self.act = ACT_FNS[config.afn]
         self.dropout = nn.Dropout(p=config.resid_pdrop)
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs the output of the Multi-Layer Perceptron (MLP) model.
         
@@ -340,10 +342,10 @@ layer (self.c_fc), applies the second convolutional layer (self.c_proj) to the r
         return self.dropout(h2)
 
 
-class Block(nn.Cell):
+class Block(nn.Module):
 
     """
-    This class represents a block in a neural network model. It is a subclass of nn.Cell and is used for building transformer models.
+    This class represents a block in a neural network model. It is a subclass of nn.Module and is used for building transformer models.
     
     Attributes:
         attn (Attention): The attention module of the block.
@@ -391,11 +393,11 @@ class Block(nn.Cell):
         super().__init__()
         nx = config.n_embd
         self.attn = Attention(nx, n_positions, config, scale)
-        self.ln_1 = nn.LayerNorm([nx], epsilon=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm([nx], eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
-        self.ln_2 = nn.LayerNorm([nx], epsilon=config.layer_norm_epsilon)
+        self.ln_2 = nn.LayerNorm([nx], eps=config.layer_norm_epsilon)
 
-    def construct(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         """
         Constructs a block in the given class.
         
@@ -552,7 +554,7 @@ training based on the input data and configuration.
         self.tokens_embed = nn.Embedding(config.vocab_size, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(p=config.embd_pdrop)
-        self.h = nn.CellList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
         self.position_ids = ops.arange(config.n_positions)
         # Initialize weights and apply final processing
@@ -610,7 +612,7 @@ data type and should contain the updated embeddings.
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -768,7 +770,7 @@ on input features.
         """
         super().__init__(config)
         self.transformer = GPTModel(config)
-        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -805,7 +807,7 @@ on input features.
         """
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -933,7 +935,7 @@ modeling and multiple choice classification.
 
         config.num_labels = 1
         self.transformer = GPTModel(config)
-        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         # Initialize weights and apply final processing
@@ -970,7 +972,7 @@ modeling and multiple choice classification.
         """
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1119,12 +1121,12 @@ the method calculates the loss using operations provided by the 'ops' module.
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTModel(config)
-        self.score = nn.Dense(config.n_embd, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.n_embd, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

@@ -70,16 +70,16 @@ class Owlv2Processor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or MindSpore
                 tensor. Both channels-first and channels-last formats are supported.
             query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The query image to be prepared, one query image is expected per target image to be queried. Each image
-                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
+                can be a PIL image, NumPy array or MindSpore tensor. In case of a NumPy array/MindSpore tensor, each image
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:

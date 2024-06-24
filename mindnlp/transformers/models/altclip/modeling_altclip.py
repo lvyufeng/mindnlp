@@ -184,7 +184,7 @@ class AltRobertaEmbeddings(nn.Module):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-    def construct(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         """
@@ -356,7 +356,7 @@ class AltRobertaSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -522,7 +522,7 @@ applies layer normalization to the output. The output is the sum of the layer-no
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the output of the self-attention mechanism in the AltRoberta model.
         
@@ -617,7 +617,7 @@ find_pruneable_heads_and_indices, prune_linear_layer) will propagate to the call
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -700,7 +700,7 @@ class AltRobertaIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Method to construct hidden states in the AltRobertaIntermediate class.
         
@@ -760,7 +760,7 @@ input hidden states and input tensor.
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the output of the alternative Roberta model.
         
@@ -837,7 +837,7 @@ class AltRobertaLayer(nn.Module):
         self.intermediate = AltRobertaIntermediate(config)
         self.output = AltRobertaOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -979,7 +979,7 @@ input parameters.
         self.layer = nn.ModuleList([AltRobertaLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1123,7 +1123,7 @@ method takes hidden_states as input, extracts the first token tensor, applies th
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a pooled output tensor from the given hidden states tensor.
         
@@ -1202,7 +1202,7 @@ class AltCLIPAttention(nn.Module):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1320,7 +1320,7 @@ class AltCLIPMLP(nn.Module):
         self.fc1 = nn.Dense(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Dense(config.intermediate_size, config.hidden_size)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Construct the AltCLIPMLP model.
         
@@ -1405,7 +1405,7 @@ class AltCLIPEncoderLayer(nn.Module):
         self.mlp = AltCLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -1478,7 +1478,7 @@ class AltCLIPEncoder(nn.Module):
         self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1626,7 +1626,7 @@ class AltCLIPVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.position_ids = ops.arange(self.num_positions).expand((1, -1))
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the embeddings for the AltCLIPVisionEmbeddings model.
         
@@ -1764,7 +1764,7 @@ controlling the output format.
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1859,7 +1859,7 @@ utilization of pre-trained models for various vision-related tasks.
         """
         return self.vision_model.embeddings.patch_embedding
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1982,7 +1982,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.forward
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2211,7 +2211,7 @@ and returns the model's output, including the last hidden state and the pooled C
         """
         return super().resize_token_embeddings(new_num_tokens)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2450,7 +2450,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
 
         return image_features
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         pixel_values: Optional[mindspore.Tensor] = None,

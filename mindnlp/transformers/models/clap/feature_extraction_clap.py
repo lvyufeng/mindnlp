@@ -291,7 +291,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.np.array` objects.
+                - `'pt'`: Return MindSpore `torch.np.array` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass

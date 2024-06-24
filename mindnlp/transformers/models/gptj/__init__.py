@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch GPT-J model."""
+"""MindSpore GPT-J model."""
 from . import modeling_gptj,configuration_gptj
 from .modeling_gptj import (
             GPTJForCausalLM,

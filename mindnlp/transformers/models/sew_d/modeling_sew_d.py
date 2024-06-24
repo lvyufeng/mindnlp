@@ -22,7 +22,9 @@ import numpy as np
 
 
 import mindspore
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 from mindnlp.modules.weight_norm import weight_norm
 from mindnlp.utils import logging
@@ -279,7 +281,7 @@ def get_mask(input, local_context):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SEWD
-class SEWDNoLayerNormConvLayer(nn.Cell):
+class SEWDNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -290,19 +292,19 @@ class SEWDNoLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="pad",
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SEWD
-class SEWDLayerNormConvLayer(nn.Cell):
+class SEWDLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -313,13 +315,13 @@ class SEWDLayerNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="pad",
         )
         self.layer_norm = nn.LayerNorm(self.out_conv_dim)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.swapaxes(-2, -1)
@@ -331,7 +333,7 @@ class SEWDLayerNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SEWD
-class SEWDGroupNormConvLayer(nn.Cell):
+class SEWDGroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -342,7 +344,7 @@ class SEWDGroupNormConvLayer(nn.Cell):
             self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            has_bias=config.conv_bias,
+            bias=config.conv_bias,
             pad_mode="pad",
         )
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -351,7 +353,7 @@ class SEWDGroupNormConvLayer(nn.Cell):
             num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True
         )
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -359,7 +361,7 @@ class SEWDGroupNormConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.sew.modeling_sew.SEWPositionalConvEmbedding with SEW->SEWD
-class SEWDPositionalConvEmbedding(nn.Cell):
+class SEWDPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv1d(
@@ -370,14 +372,14 @@ class SEWDPositionalConvEmbedding(nn.Cell):
             group=config.num_conv_pos_embedding_groups,
             stride=config.squeeze_factor,
             pad_mode="pad",
-            has_bias=True,
+            bias=True,
         )
         self.conv = weight_norm(self.conv, dim=2)
 
         self.padding = SEWDSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -386,19 +388,19 @@ class SEWDPositionalConvEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SEW
-class SEWDSamePadLayer(nn.Cell):
+class SEWDSamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         if self.num_pad_remove > 0:
             hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
 # Copied from transformers.models.sew.modeling_sew.SEWUpsampling with SEW->SEWD
-class SEWDUpsampling(nn.Cell):
+class SEWDUpsampling(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.projection = nn.Dense(
@@ -407,7 +409,7 @@ class SEWDUpsampling(nn.Cell):
         self.activation = ACT2FN[config.feat_extract_activation]
         self.squeeze_factor = config.squeeze_factor
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.projection(hidden_states)
         hidden_states = self.activation(hidden_states)
 
@@ -425,7 +427,7 @@ class SEWDUpsampling(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->SEWD
-class SEWDFeatureEncoder(nn.Cell):
+class SEWDFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -445,7 +447,7 @@ class SEWDFeatureEncoder(nn.Cell):
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
-        self.conv_layers = nn.CellList(conv_layers)
+        self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -454,7 +456,7 @@ class SEWDFeatureEncoder(nn.Cell):
             param.requires_grad = False
         self._requires_grad = False
 
-    def construct(self, input_values):
+    def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
@@ -485,14 +487,14 @@ class SEWDFeatureExtractor(SEWDFeatureEncoder):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.ContextPooler
-class ContextPooler(nn.Cell):
+class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.pooler_hidden_size, config.pooler_hidden_size)
         self.dropout = StableDropout(config.pooler_dropout)
         self.config = config
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
 
@@ -508,14 +510,14 @@ class ContextPooler(nn.Cell):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
-class XSoftmax(nn.Cell):
+class XSoftmax(nn.Module):
 
     def __init__(self, dim=-1):
 
         super().__init__()
         self.dim = dim
 
-    def construct(self, input, mask):
+    def forward(self, input, mask):
         """
         Constructs a softmax operation with masking for a given input tensor.
 
@@ -582,14 +584,14 @@ class DropoutContext:
         self.reuse_mask = True
 
 
-class XDropout(nn.Cell):
+class XDropout(nn.Module):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 
     def __init__(self, local_ctx):
         super(XDropout, self).__init__()
         self.local_ctx = local_ctx
 
-    def construct(self, input):
+    def forward(self, input):
         mask, dropout = get_mask(input, self.local_ctx)
         scale = 1.0 / (1 - dropout)
         if dropout > 0:
@@ -609,7 +611,7 @@ class XDropout(nn.Cell):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
-class StableDropout(nn.Cell):
+class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
 
@@ -623,7 +625,7 @@ class StableDropout(nn.Cell):
         self.count = 0
         self.context_stack = None
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Call the module
 
@@ -659,16 +661,16 @@ class StableDropout(nn.Cell):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaV2->SEWD, DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
-class SEWDSelfOutput(nn.Cell):
+class SEWDSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = StableDropout(config.activation_dropout)
 
-    def construct(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -676,7 +678,7 @@ class SEWDSelfOutput(nn.Cell):
 
 
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.DisentangledSelfAttention with attention_probs_dropout_prob->attention_dropout, hidden_dropout_prob->activation_dropout
-class DisentangledSelfAttention(nn.Cell):
+class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
 
@@ -701,11 +703,11 @@ class DisentangledSelfAttention(nn.Cell):
         )
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query_proj = nn.Dense(
-            config.hidden_size, self.all_head_size, has_bias=True
+            config.hidden_size, self.all_head_size, bias=True
         )
-        self.key_proj = nn.Dense(config.hidden_size, self.all_head_size, has_bias=True)
+        self.key_proj = nn.Dense(config.hidden_size, self.all_head_size, bias=True)
         self.value_proj = nn.Dense(
-            config.hidden_size, self.all_head_size, has_bias=True
+            config.hidden_size, self.all_head_size, bias=True
         )
 
         self.share_att_key = getattr(config, "share_att_key", False)
@@ -728,7 +730,7 @@ class DisentangledSelfAttention(nn.Cell):
             if not self.share_att_key:
                 if "c2p" in self.pos_att_type:
                     self.pos_key_proj = nn.Dense(
-                        config.hidden_size, self.all_head_size, has_bias=True
+                        config.hidden_size, self.all_head_size, bias=True
                     )
                 if "p2c" in self.pos_att_type:
                     self.pos_query_proj = nn.Dense(
@@ -742,7 +744,7 @@ class DisentangledSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3).view(-1, x.shape[1], x.shape[-1])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask,
@@ -918,14 +920,14 @@ class DisentangledSelfAttention(nn.Cell):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->SEWD
-class SEWDAttention(nn.Cell):
+class SEWDAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.self = DisentangledSelfAttention(config)
         self.output = SEWDSelfOutput(config)
         self.config = config
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask,
@@ -955,7 +957,7 @@ class SEWDAttention(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->SEWD
-class SEWDIntermediate(nn.Cell):
+class SEWDIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
@@ -964,24 +966,24 @@ class SEWDIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaOutput with DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
-class SEWDOutput(nn.Cell):
+class SEWDOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = StableDropout(config.activation_dropout)
         self.config = config
 
-    def construct(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -989,14 +991,14 @@ class SEWDOutput(nn.Cell):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->SEWD
-class SEWDLayer(nn.Cell):
+class SEWDLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = SEWDAttention(config)
         self.intermediate = SEWDIntermediate(config)
         self.output = SEWDOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask,
@@ -1024,7 +1026,7 @@ class SEWDLayer(nn.Cell):
 
 
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.ConvLayer
-class ConvLayer(nn.Cell):
+class ConvLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         kernel_size = getattr(config, "conv_kernel_size", 3)
@@ -1037,15 +1039,15 @@ class ConvLayer(nn.Cell):
             padding=(kernel_size - 1) // 2,
             group=groups,
             pad_mode="pad",
-            has_bias=True,
+            bias=True,
         )
         self.LayerNorm = nn.LayerNorm(
-            [config.hidden_size], epsilon=config.layer_norm_eps
+            [config.hidden_size], eps=config.layer_norm_eps
         )
         self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
-    def construct(self, hidden_states, residual_states, input_mask):
+    def forward(self, hidden_states, residual_states, input_mask):
         out = self.conv(hidden_states.permute(0, 2, 1)).permute(0, 2, 1)
         rmask = (1 - input_mask).bool()
         out.masked_fill_(rmask.unsqueeze(-1).expand((out.shape)), 0)
@@ -1069,13 +1071,13 @@ class ConvLayer(nn.Cell):
 
 
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
-class SEWDTransformerEncoder(nn.Cell):
+class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
     def __init__(self, config):
         super().__init__()
 
-        self.layer = nn.CellList(
+        self.layer = nn.ModuleList(
             [SEWDLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.relative_attention = getattr(config, "relative_attention", False)
@@ -1100,7 +1102,7 @@ class SEWDTransformerEncoder(nn.Cell):
 
         if "layer_norm" in self.norm_rel_ebd:
             self.LayerNorm = nn.LayerNorm(
-                [config.hidden_size], epsilon=config.layer_norm_eps
+                [config.hidden_size], eps=config.layer_norm_eps
             )
 
         self.conv = (
@@ -1140,7 +1142,7 @@ class SEWDTransformerEncoder(nn.Cell):
             )
         return relative_pos
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask,
@@ -1222,7 +1224,7 @@ class SEWDTransformerEncoder(nn.Cell):
         )
 
 
-class SEWDEncoder(nn.Cell):
+class SEWDEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1232,7 +1234,7 @@ class SEWDEncoder(nn.Cell):
         self.upsample = SEWDUpsampling(config)
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1404,7 +1406,8 @@ class SEWDModel(SEWDPreTrainedModel):
         self.config = config
         self.feature_extractor = SEWDFeatureEncoder(config)
         self.layer_norm = nn.LayerNorm(
-            [config.conv_dim[-1]], epsilon=config.feature_layer_norm_eps
+            [config.conv_dim[-1]], eps=
+config.feature_layer_norm_eps
         )
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
@@ -1483,7 +1486,7 @@ class SEWDModel(SEWDPreTrainedModel):
 
         return hidden_states
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1627,7 +1630,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
         for name, param in self.sew_d.parameters_and_names():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1756,7 +1759,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         for name, param in self.sew_d.parameters_and_names():
             param.requires_grad = False
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,

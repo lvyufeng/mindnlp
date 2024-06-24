@@ -111,7 +111,7 @@ class ASTEmbeddings(nn.Module):
 
         return frequency_out_dimension, time_out_dimension
 
-    def construct(self, input_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, input_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Method to construct AST embeddings.
         
@@ -174,7 +174,7 @@ class ASTPatchEmbeddings(nn.Module):
         )
 
 
-    def construct(self, input_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, input_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs patch embeddings for the input tensor.
         
@@ -269,7 +269,7 @@ output attention probabilities along with the context layer.
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self, hidden_states, head_mask: Optional[mindspore.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[mindspore.Tensor, mindspore.Tensor], Tuple[mindspore.Tensor]]:
         """
@@ -349,7 +349,7 @@ class ASTSelfOutput(nn.Module):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the ASTSelfOutput.
         
@@ -455,7 +455,7 @@ class ASTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -545,7 +545,7 @@ ACT2FN dictionary. Otherwise, it sets it to the value of the 'hidden_act' attrib
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs an intermediate layer of the ASTIntermediate class.
         
@@ -617,7 +617,7 @@ class ASTOutput(nn.Module):
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs a new tensor by performing operations on the input hidden_states and input_tensor.
         
@@ -666,7 +666,7 @@ class ASTLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -765,7 +765,7 @@ Union[tuple, BaseModelOutput]:
         self.layer = nn.ModuleList([ASTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -925,7 +925,7 @@ ASTModel provides a comprehensive solution for AST-based tasks.
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -1029,7 +1029,7 @@ constructing the MLP head.
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense = nn.Dense(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-    def construct(self, hidden_state):
+    def forward(self, hidden_state):
         """
         Constructs the hidden state of the ASTMLPHead.
         
@@ -1103,7 +1103,7 @@ Optional[bool], return_dict: Optional[bool]) -> Union[tuple, SequenceClassifierO
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,

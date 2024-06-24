@@ -23,7 +23,10 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import (
@@ -58,7 +61,7 @@ MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class MegatronBertEmbeddings(nn.Cell):
+class MegatronBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
     def __init__(self, config):
         """
@@ -93,7 +96,7 @@ class MegatronBertEmbeddings(nn.Cell):
         self.position_ids = ops.arange(config.max_position_embeddings).broadcast_to((1, -1))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -147,7 +150,7 @@ class MegatronBertEmbeddings(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
-class MegatronBertSelfAttention(nn.Cell):
+class MegatronBertSelfAttention(nn.Module):
 
     """
     This class represents the self-attention mechanism used in the Megatron-BERT model. It is used to calculate the attention scores and apply attention weights to the input hidden states.
@@ -243,7 +246,7 @@ None, encoder_attention_mask: Optional[mindspore.Tensor] = None, past_key_value:
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -367,12 +370,12 @@ None, encoder_attention_mask: Optional[mindspore.Tensor] = None, past_key_value:
 
 
 # Based transformers.models.bert.modeling_bert.BertSelfOutput. Moved LayerNorm to MegatronBertAttention below.
-class MegatronBertSelfOutput(nn.Cell):
+class MegatronBertSelfOutput(nn.Module):
 
     """
     The MegatronBertSelfOutput class represents a neural network cell for processing self-attention output in a Megatron-style BERT model. This class is designed to be used within a neural network architecture.
     
-    This class inherits from the nn.Cell class, and it contains methods for initializing the cell and constructing the self-attention output.
+    This class inherits from the nn.Module class, and it contains methods for initializing the cell and constructing the self-attention output.
     
     The __init__ method initializes the MegatronBertSelfOutput cell with the given configuration, including setting up dense layers and dropout for processing the hidden states.
     
@@ -401,7 +404,7 @@ the processed hidden states.
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, residual: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the self-attention output for the MegatronBert model.
         
@@ -426,12 +429,12 @@ the processed hidden states.
 
 
 # Based transformers.models.bert.modeling_bert.BertAttention. Added LayerNorm.
-class MegatronBertAttention(nn.Cell):
+class MegatronBertAttention(nn.Module):
 
     """
     This class represents the attention mechanism used in Megatron-BERT models. It is a part of the Megatron-BERT architecture and is responsible for performing self-attention operations.
     
-    The MegatronBertAttention class inherits from the nn.Cell class.
+    The MegatronBertAttention class inherits from the nn.Module class.
     
     Attributes:
         ln (nn.LayerNorm): Layer normalization module used in the attention mechanism.
@@ -463,7 +466,7 @@ mechanism computation.
             None
         """
         super().__init__()
-        self.ln = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.ln = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.self = MegatronBertSelfAttention(config)
         self.output = MegatronBertSelfOutput(config)
         self.pruned_heads = set()
@@ -503,7 +506,7 @@ self-attention mechanism.
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -548,12 +551,12 @@ self-attention mechanism.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->MegatronBert
-class MegatronBertIntermediate(nn.Cell):
+class MegatronBertIntermediate(nn.Module):
 
     """
     Represents an intermediate layer of a Megatron-style BERT model for processing hidden states.
     
-    This class inherits from nn.Cell and contains methods for initializing the intermediate layer and processing hidden states through dense and activation functions.
+    This class inherits from nn.Module and contains methods for initializing the intermediate layer and processing hidden states through dense and activation functions.
     
     Attributes:
         dense (nn.Dense): The dense layer used for processing hidden states.
@@ -588,7 +591,7 @@ it is a function, it should be a custom activation function.
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the intermediate layer of the Megatron BERT model.
         
@@ -608,7 +611,7 @@ it is a function, it should be a custom activation function.
 
 
 # Based on transformers.models.bert.modeling_bert.BertOutput. Moved LayerNorm to MegatronBertLayer below.
-class MegatronBertOutput(nn.Cell):
+class MegatronBertOutput(nn.Module):
 
     """A module that serves as the output layer of the Megatron-BERT model.
     
@@ -634,7 +637,7 @@ class MegatronBertOutput(nn.Cell):
             Applies the dense layer and dropout layer to the input tensor, and returns the sum of the input tensor and the transformed tensor.
     
     Note:
-        This class inherits from `nn.Cell` and is typically used as a component within the Megatron-BERT model architecture.
+        This class inherits from `nn.Module` and is typically used as a component within the Megatron-BERT model architecture.
     """
     def __init__(self, config):
         """
@@ -657,7 +660,7 @@ class MegatronBertOutput(nn.Cell):
         self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the MegatronBertOutput by adding the hidden states to the input tensor.
         
@@ -685,7 +688,7 @@ class MegatronBertOutput(nn.Cell):
 
 
 # Based on transformers.models.bert.modeling_bert.BertLayer. Added LayerNorm.
-class MegatronBertLayer(nn.Cell):
+class MegatronBertLayer(nn.Module):
 
     """
     This class represents a layer of the Megatron-Bert model. It is used to perform attention and feed-forward operations on input hidden states.
@@ -750,11 +753,11 @@ class MegatronBertLayer(nn.Cell):
             if not self.is_decoder:
                 raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = MegatronBertAttention(config)
-        self.ln = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.ln = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.intermediate = MegatronBertIntermediate(config)
         self.output = MegatronBertOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -865,10 +868,10 @@ decoder, the tuple also contains the present key-value tensor of shape (2, batch
         return layer_output
 
 
-class MegatronBertEncoder(nn.Cell):
+class MegatronBertEncoder(nn.Module):
 
     """
-    The MegatronBertEncoder class represents a transformer encoder for Megatron-BERT. It inherits from nn.Cell and is responsible for encoding input sequences using multiple layers of transformer blocks. The
+    The MegatronBertEncoder class represents a transformer encoder for Megatron-BERT. It inherits from nn.Module and is responsible for encoding input sequences using multiple layers of transformer blocks. The
 class provides methods for constructing the encoder and performing forward pass computations, including handling gradient checkpointing and caching for efficient training and inference.
     
     Attributes:
@@ -908,14 +911,14 @@ transformer-based encoding.
         """
         super().__init__()
         self.config = config
-        self.layer = nn.CellList([MegatronBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([MegatronBertLayer(config) for _ in range(config.num_hidden_layers)])
 
         # The final layer norm. We removed the 1st LN, moved LN to each hidden layer and this one
         # is simply the final LN (Transformer's BERT has it attached to each hidden layer).
-        self.ln = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.ln = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1032,12 +1035,12 @@ encoder_sequence_length). Defaults to None.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->MegatronBert
-class MegatronBertPooler(nn.Cell):
+class MegatronBertPooler(nn.Module):
 
     """This class represents a Pooler for the MegatronBert model.
     
     The MegatronBertPooler class is responsible for pooling the hidden states of the MegatronBert model
-    and producing a pooled output tensor. It inherits from the nn.Cell class.
+    and producing a pooled output tensor. It inherits from the nn.Module class.
     
     Attributes:
         dense (nn.Dense): A fully connected layer that maps the input tensor to the desired output size.
@@ -1069,7 +1072,7 @@ class MegatronBertPooler(nn.Cell):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         ''' 
         This method constructs pooled output from the hidden states of the MegatronBertPooler model.
         
@@ -1092,11 +1095,11 @@ class MegatronBertPooler(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->MegatronBert
-class MegatronBertPredictionHeadTransform(nn.Cell):
+class MegatronBertPredictionHeadTransform(nn.Module):
 
     """Represents a transformation head for the Megatron-BERT prediction head.
     
-    This class inherits from nn.Cell and provides methods for transforming hidden states as part of the Megatron-BERT prediction head. It includes a dense layer, activation function transformation, and layer
+    This class inherits from nn.Module and provides methods for transforming hidden states as part of the Megatron-BERT prediction head. It includes a dense layer, activation function transformation, and layer
 normalization.
     
     Attributes:
@@ -1129,9 +1132,9 @@ normalization.
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the MegatronBertPredictionHeadTransform.
         
@@ -1154,13 +1157,13 @@ normalization.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->MegatronBert
-class MegatronBertLMPredictionHead(nn.Cell):
+class MegatronBertLMPredictionHead(nn.Module):
 
     """MegatronBertLMPredictionHead
     
     This class represents the prediction head for the Megatron-BERT language model. It is responsible for transforming the hidden states and generating predictions for the next token in a sequence.
     
-    This class inherits from the nn.Cell class.
+    This class inherits from the nn.Module class.
     
     Attributes:
         transform (MegatronBertPredictionHeadTransform): An instance of the MegatronBertPredictionHeadTransform class, used to transform the hidden states.
@@ -1191,14 +1194,14 @@ class MegatronBertLMPredictionHead(nn.Cell):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.decoder = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = Parameter(ops.zeros(config.vocab_size), 'bias')
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the MegatronBertLMPredictionHead.
         
@@ -1222,12 +1225,12 @@ class MegatronBertLMPredictionHead(nn.Cell):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->MegatronBert
-class MegatronBertOnlyMLMHead(nn.Cell):
+class MegatronBertOnlyMLMHead(nn.Module):
 
     """
     Represents a Megatron-style MLM head for BERT models, which includes only the MLM prediction head without the rest of the model.
     
-    This class inherits from nn.Cell and is designed to be used in conjunction with a BERT model for masked language modeling tasks. It contains methods for initializing the prediction head and generating
+    This class inherits from nn.Module and is designed to be used in conjunction with a BERT model for masked language modeling tasks. It contains methods for initializing the prediction head and generating
 prediction scores based on the input sequence output.
     
     The class includes an __init__ method to initialize the prediction head with the provided configuration, and a construct method to generate prediction scores using the sequence output tensor. The
@@ -1253,7 +1256,7 @@ prediction scores are obtained by passing the sequence output through the predic
         super().__init__()
         self.predictions = MegatronBertLMPredictionHead(config)
 
-    def construct(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, sequence_output: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs predictions for masked language modeling using the MegatronBertOnlyMLMHead class.
         
@@ -1275,12 +1278,12 @@ prediction scores are obtained by passing the sequence output through the predic
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->MegatronBert
-class MegatronBertOnlyNSPHead(nn.Cell):
+class MegatronBertOnlyNSPHead(nn.Module):
 
     """
     This class represents the NSP (Next Sentence Prediction) head for the Megatron-BERT model.
     
-    The MegatronBertOnlyNSPHead class inherits from the nn.Cell class and is responsible for predicting whether two sentences follow each other in a text. It is used in the Megatron-BERT model to perform the
+    The MegatronBertOnlyNSPHead class inherits from the nn.Module class and is responsible for predicting whether two sentences follow each other in a text. It is used in the Megatron-BERT model to perform the
 next sentence prediction task.
     
     Attributes:
@@ -1323,7 +1326,7 @@ next sentence prediction task.
         super().__init__()
         self.seq_relationship = nn.Dense(config.hidden_size, 2)
 
-    def construct(self, pooled_output):
+    def forward(self, pooled_output):
         """
         Method 'construct' in the class 'MegatronBertOnlyNSPHead'.
         
@@ -1348,12 +1351,12 @@ next sentence prediction task.
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->MegatronBert
-class MegatronBertPreTrainingHeads(nn.Cell):
+class MegatronBertPreTrainingHeads(nn.Module):
 
     """
     This class represents the pre-training heads of the Megatron-BERT model. It is responsible for predicting masked tokens and determining the relationship between input sequences.
     
-    The MegatronBertPreTrainingHeads class is a subclass of nn.Cell.
+    The MegatronBertPreTrainingHeads class is a subclass of nn.Module.
     
     Attributes:
         predictions (MegatronBertLMPredictionHead): An instance of the MegatronBertLMPredictionHead class that handles predicting masked tokens.
@@ -1382,7 +1385,7 @@ class MegatronBertPreTrainingHeads(nn.Cell):
         self.predictions = MegatronBertLMPredictionHead(config)
         self.seq_relationship = nn.Dense(config.hidden_size, 2)
 
-    def construct(self, sequence_output, pooled_output):
+    def forward(self, sequence_output, pooled_output):
         """
         Construct method in the MegatronBertPreTrainingHeads class.
         
@@ -1420,7 +1423,7 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -1550,7 +1553,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1745,7 +1748,7 @@ attentions. This method supports both batch and sequence-level losses for masked
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1894,7 +1897,7 @@ enable fine-tuning and using the model for causal language modeling tasks.
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2141,7 +2144,7 @@ responsible for generating output embeddings during inference. The method does n
         """
         self.cls.predictions.decoder = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2296,7 +2299,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2418,7 +2421,7 @@ classification/regression loss.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2552,7 +2555,7 @@ forward pass given the input tensors. It returns the logits for each choice and 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2661,7 +2664,7 @@ token classification loss using cross-entropy.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2754,7 +2757,7 @@ Megatron-BERT model and generates predictions for question answering tasks.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

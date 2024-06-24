@@ -98,7 +98,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
-            The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of PyTorch's
+            The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of MindSpore's
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
@@ -752,7 +752,7 @@ types.
             max_length (Optional[int]): The maximum length of the encoded output. Defaults to None.
             stride (int): The stride to use for overflowing tokens. Defaults to 0.
             pad_to_multiple_of (Optional[int]): The padding length will be a multiple of this value. Defaults to None.
-            return_tensors (Optional[bool]): Whether to return the encoded output as PyTorch/TensorFlow tensors. Defaults to None.
+            return_tensors (Optional[bool]): Whether to return the encoded output as MindSpore/TensorFlow tensors. Defaults to None.
             return_token_type_ids (Optional[bool]): Whether to return the token type IDs. Defaults to None.
             return_attention_mask (Optional[bool]): Whether to return the attention mask. Defaults to None.
             return_overflowing_tokens (bool): Whether to return overflowing tokens if the input length exceeds max_length. Defaults to False.

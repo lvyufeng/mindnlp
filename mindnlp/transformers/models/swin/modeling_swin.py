@@ -25,7 +25,9 @@ from typing import Optional, Tuple, Union, Iterable
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from mindspore.common.initializer import initializer, Normal
 
@@ -226,7 +228,7 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-class WindowPartition(nn.Cell):
+class WindowPartition(nn.Module):
     def __init__(
         self,
         window_size: int,
@@ -235,7 +237,7 @@ class WindowPartition(nn.Cell):
 
         self.window_size = window_size
 
-    def construct(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, x: mindspore.Tensor) -> mindspore.Tensor:
         b, h, w, c = x.shape
         x = ops.reshape(x, (b, h // self.window_size, self.window_size, w // self.window_size, self.window_size, c))
         x = ops.transpose(x, (0, 1, 3, 2, 4, 5))
@@ -243,8 +245,8 @@ class WindowPartition(nn.Cell):
         return x
 
 
-class WindowReverse(nn.Cell):
-    def construct(
+class WindowReverse(nn.Module):
+    def forward(
         self,
         windows: mindspore.Tensor,
         window_size: int,
@@ -258,7 +260,7 @@ class WindowReverse(nn.Cell):
         return x
 
 
-class Roll(nn.Cell):
+class Roll(nn.Module):
 
     def __init__(self, shift_size: int, shift_axis: Tuple[int] = (1, 2)):
         super().__init__()
@@ -266,12 +268,12 @@ class Roll(nn.Cell):
         self.shift_size = to_2tuple(shift_size)
         self.shift_axis = shift_axis
 
-    def construct(self, x: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, x: mindspore.Tensor) -> mindspore.Tensor:
         x = np.roll(x.numpy(), self.shift_size, self.shift_axis)
         return Tensor.from_numpy(x)
 
 
-class SwinEmbeddings(nn.Cell):
+class SwinEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
     """
@@ -292,7 +294,7 @@ class SwinEmbeddings(nn.Cell):
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(
+    def forward(
         self, pixel_values: Optional[mindspore.Tensor], bool_masked_pos: Optional[mindspore.Tensor] = None
     ) -> Tuple[mindspore.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
@@ -313,7 +315,7 @@ class SwinEmbeddings(nn.Cell):
         return embeddings, output_dimensions
 
 
-class SwinPatchEmbeddings(nn.Cell):
+class SwinPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -333,7 +335,7 @@ class SwinPatchEmbeddings(nn.Cell):
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, has_bias=True)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=True)
 
     def maybe_pad(self, pixel_values, height, width):
         if width % self.patch_size[1] != 0:
@@ -344,7 +346,7 @@ class SwinPatchEmbeddings(nn.Cell):
             pixel_values = ops.pad(pixel_values, pad_values)
         return pixel_values
 
-    def construct(self, pixel_values: Optional[mindspore.Tensor]) -> Tuple[mindspore.Tensor, Tuple[int]]:
+    def forward(self, pixel_values: Optional[mindspore.Tensor]) -> Tuple[mindspore.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -360,7 +362,7 @@ class SwinPatchEmbeddings(nn.Cell):
         return embeddings, output_dimensions
 
 
-class SwinPatchMerging(nn.Cell):
+class SwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
 
@@ -369,15 +371,15 @@ class SwinPatchMerging(nn.Cell):
             Resolution of input feature.
         dim (`int`):
             Number of input channels.
-        norm_layer (`nn.Cell`, *optional*, defaults to `nn.LayerNorm`):
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
             Normalization layer class.
     """
 
-    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Cell = nn.LayerNorm) -> None:
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.reduction = nn.Dense(4 * dim, 2 * dim, has_bias=False)
+        self.reduction = nn.Dense(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
     def maybe_pad(self, input_feature, height, width):
@@ -388,7 +390,7 @@ class SwinPatchMerging(nn.Cell):
 
         return input_feature
 
-    def construct(self, input_feature: mindspore.Tensor, input_dimensions: Tuple[int, int]) -> mindspore.Tensor:
+    def forward(self, input_feature: mindspore.Tensor, input_dimensions: Tuple[int, int]) -> mindspore.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
@@ -436,21 +438,21 @@ def drop_path(input: mindspore.Tensor, drop_prob: float = 0.0, training: bool = 
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swin
-class SwinDropPath(nn.Cell):
+class SwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
 
 
-class SwinSelfAttention(nn.Cell):
+class SwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         if dim % num_heads != 0:
@@ -482,9 +484,9 @@ class SwinSelfAttention(nn.Cell):
         relative_position_index = relative_coords.sum(-1)
         self.relative_position_index = relative_position_index
 
-        self.query = nn.Dense(self.all_head_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.key = nn.Dense(self.all_head_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.value = nn.Dense(self.all_head_size, self.all_head_size, has_bias=config.qkv_bias)
+        self.query = nn.Dense(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Dense(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Dense(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
 
@@ -493,7 +495,7 @@ class SwinSelfAttention(nn.Cell):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -550,20 +552,20 @@ class SwinSelfAttention(nn.Cell):
         return outputs
 
 
-class SwinSelfOutput(nn.Cell):
+class SwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Dense(dim, dim)
         self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
 
-class SwinAttention(nn.Cell):
+class SwinAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         self.self = SwinSelfAttention(config, dim, num_heads, window_size)
@@ -588,7 +590,7 @@ class SwinAttention(nn.Cell):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -601,7 +603,7 @@ class SwinAttention(nn.Cell):
         return outputs
 
 
-class SwinIntermediate(nn.Cell):
+class SwinIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Dense(dim, int(config.mlp_ratio * dim))
@@ -610,35 +612,35 @@ class SwinIntermediate(nn.Cell):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-class SwinOutput(nn.Cell):
+class SwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Dense(int(config.mlp_ratio * dim), dim)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
 
-class SwinLayer(nn.Cell):
+class SwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-        self.layernorm_before = nn.LayerNorm(dim, epsilon=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
         self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_after = nn.LayerNorm(dim, epsilon=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
         # mindcv impl.
@@ -688,7 +690,7 @@ class SwinLayer(nn.Cell):
         hidden_states = ops.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         input_dimensions: Tuple[int, int],
@@ -756,12 +758,12 @@ class SwinLayer(nn.Cell):
         return layer_outputs
 
 
-class SwinStage(nn.Cell):
+class SwinStage(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.CellList(
+        self.blocks = nn.ModuleList(
             [
                 SwinLayer(
                     config=config,
@@ -782,7 +784,7 @@ class SwinStage(nn.Cell):
 
         self.pointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         input_dimensions: Tuple[int, int],
@@ -815,13 +817,13 @@ class SwinStage(nn.Cell):
         return stage_outputs
 
 
-class SwinEncoder(nn.Cell):
+class SwinEncoder(nn.Module):
     def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
         dpr = [x.item() for x in ops.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [
                 SwinStage(
                     config=config,
@@ -838,7 +840,7 @@ class SwinEncoder(nn.Cell):
 
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         input_dimensions: Tuple[int, int],
@@ -951,7 +953,7 @@ class SwinModel(SwinPreTrainedModel):
         self.embeddings = SwinEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
-        self.layernorm = nn.LayerNorm(self.num_features, epsilon=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -968,7 +970,7 @@ class SwinModel(SwinPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         bool_masked_pos: Optional[mindspore.Tensor] = None,
@@ -1047,7 +1049,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         bool_masked_pos: Optional[mindspore.Tensor] = None,
@@ -1146,7 +1148,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -1224,7 +1226,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         hidden_states_norms = {}
         for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
-        self.hidden_states_norms = nn.CellDict(hidden_states_norms)
+        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1232,7 +1234,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         output_hidden_states: Optional[bool] = None,

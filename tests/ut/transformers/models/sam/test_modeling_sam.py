@@ -449,7 +449,7 @@ def prepare_dog_img():
 class SamModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
+        # clean-up as much as possible GPU memory occupied by MindSpore
         gc.collect()
 
     def test_inference_mask_generation_no_point(self):

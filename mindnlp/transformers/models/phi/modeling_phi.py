@@ -21,7 +21,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal, initializer
 
 from mindnlp.utils import logging, get_default_dtype
@@ -78,10 +80,10 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Phi
-class PhiRotaryEmbedding(nn.Cell):
+class PhiRotaryEmbedding(nn.Module):
 
     """
-    The PhiRotaryEmbedding class represents a rotational positional embedding for neural network models. It inherits from nn.Cell and provides functionality for constructing rotational embeddings based on
+    The PhiRotaryEmbedding class represents a rotational positional embedding for neural network models. It inherits from nn.Module and provides functionality for constructing rotational embeddings based on
 input sequences and sequence lengths.
     
     Attributes:
@@ -158,7 +160,7 @@ input sequences and sequence lengths.
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs a PhiRotaryEmbedding.
         
@@ -338,12 +340,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Phi
-class PhiMLP(nn.Cell):
+class PhiMLP(nn.Module):
 
     """
     PhiMLP represents a Multi-Layer Perceptron (MLP) neural network with configurable hidden layer sizes and activation functions.
     
-    This class inherits from nn.Cell and implements the forward pass of the MLP by defining the layers and activation functions.
+    This class inherits from nn.Module and implements the forward pass of the MLP by defining the layers and activation functions.
     
     Attributes:
         config (object): A configuration object that specifies the MLP architecture parameters.
@@ -384,7 +386,7 @@ class PhiMLP(nn.Cell):
         self.fc1 = nn.Dense(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Dense(config.intermediate_size, config.hidden_size)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the forward pass of the PhiMLP model.
         
@@ -419,7 +421,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class PhiAttention(nn.Cell):
+class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config: PhiConfig, layer_idx: Optional[int] = None):
         """
@@ -471,18 +473,18 @@ class PhiAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=True)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=True)
-        self.dense = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=True)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.dense = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=True)
 
         self.qk_layernorm = config.qk_layernorm
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(
-                [config.hidden_size // self.num_heads], epsilon=config.layer_norm_eps, elementwise_affine=True
+                [config.hidden_size // self.num_heads], eps=config.layer_norm_eps, elementwise_affine=True
             )
             self.k_layernorm = nn.LayerNorm(
-                [config.hidden_size // self.num_heads], epsilon=config.layer_norm_eps, elementwise_affine=True
+                [config.hidden_size // self.num_heads], eps=config.layer_norm_eps, elementwise_affine=True
             )
 
         self._init_rope()
@@ -536,7 +538,7 @@ scaling_factor, and base.
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -658,12 +660,12 @@ PHI_ATTENTION_CLASSES = {
 }
 
 
-class PhiDecoderLayer(nn.Cell):
+class PhiDecoderLayer(nn.Module):
 
     """
     PhiDecoderLayer represents a single layer of the Phi decoder model.
     
-    This class inherits from nn.Cell and contains methods for initializing the layer and constructing the layer's computations.
+    This class inherits from nn.Module and contains methods for initializing the layer and constructing the layer's computations.
     
     The __init__ method initializes the PhiDecoderLayer with the provided configuration and layer index. It sets up the self-attention mechanism, multi-layer perceptron, layer normalization, and residual
 dropout.
@@ -690,10 +692,10 @@ method also computes the feed-forward hidden states and returns the final layer 
         super().__init__()
         self.self_attn = PHI_ATTENTION_CLASSES["eager"](config, layer_idx=layer_idx)
         self.mlp = PhiMLP(config)
-        self.input_layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
         self.resid_dropout = nn.Dropout(p=config.resid_pdrop)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -788,7 +790,7 @@ weight value at that index is set to 0. The weight data is then set for the cell
         std = self.config.initializer_range
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(std), cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -827,7 +829,7 @@ class PhiModel(PhiPreTrainedModel):
                     - `embed_dropout`: The dropout layer applied to the input embeddings.
                       It is an instance of `nn.Dropout` and is initialized with the dropout probability `config.embd_pdrop`.
                     - `layers`: A list of PhiDecoderLayer instances representing the decoder layers of the model.
-                      It is initialized as a `nn.CellList` containing `config.num_hidden_layers` PhiDecoderLayer instances.
+                      It is initialized as a `nn.ModuleList` containing `config.num_hidden_layers` PhiDecoderLayer instances.
                       Each PhiDecoderLayer instance is created using the `PhiDecoderLayer` constructor with `config` and `layer_idx`.
                     - `final_layernorm`: The layer normalization applied to the final hidden state.
                       It is an instance of `nn.LayerNorm` and is initialized with the following attributes:
@@ -847,10 +849,10 @@ class PhiModel(PhiPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(p=config.embd_pdrop)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.final_layernorm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.final_layernorm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -888,7 +890,7 @@ class PhiModel(PhiPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1044,7 +1046,7 @@ using the model.
     """
     _tied_weights_keys = ["lm_head.weight"]
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi,bias=False->has_bias=True
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi,bias=False->bias=True
     def __init__(self, config):
         """
         Initializes an instance of the 'PhiForCausalLM' class.
@@ -1064,7 +1066,7 @@ using the model.
         super().__init__(config)
         self.model = PhiModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=True)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=True)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1177,7 +1179,7 @@ using the model.
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1406,7 +1408,7 @@ classification.
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = PhiModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1442,7 +1444,7 @@ classification.
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1585,7 +1587,7 @@ computes the loss using the logits and the ground truth labels.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,

@@ -333,7 +333,7 @@ np.ndarray and have been concatenated along the 0th axis.
                 Whether to return attention mask or not.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
                 If nothing is specified, it will return list of `np.ndarray` arrays.
         Return:
@@ -407,7 +407,7 @@ np.ndarray and have been concatenated along the 0th axis.
                 output or not. Automatically set to True for batched inputs.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
                 If nothing is specified, it will return list of `np.ndarray` arrays.
         """

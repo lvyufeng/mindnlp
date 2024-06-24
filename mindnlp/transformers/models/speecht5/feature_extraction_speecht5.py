@@ -234,7 +234,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `audio` or `audio_target` input was sampled. It is strongly recommended

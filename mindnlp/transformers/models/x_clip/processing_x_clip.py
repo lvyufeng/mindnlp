@@ -74,7 +74,7 @@ class XCLIPProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             videos (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarrray]]`,:
                 `List[List[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
-                of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/PyTorch tensors,
+                of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/MindSpore tensors,
                 each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
                 channels.
 
@@ -82,7 +82,7 @@ class XCLIPProcessor(ProcessorMixin):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 

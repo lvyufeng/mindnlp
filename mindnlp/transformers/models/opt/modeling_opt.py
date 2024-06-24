@@ -20,7 +20,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import Normal, initializer
 
 from mindnlp.utils import logging
@@ -78,7 +80,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def construct(self, attention_mask: mindspore.Tensor, past_key_values_length: int = 0):
+    def forward(self, attention_mask: mindspore.Tensor, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         attention_mask = attention_mask.long()
 
@@ -91,7 +93,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         return super().construct(positions + self.offset)
 
 
-class OPTAttention(nn.Cell):
+class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(
         self,
@@ -131,10 +133,10 @@ class OPTAttention(nn.Cell):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -154,7 +156,7 @@ class OPTAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -274,13 +276,13 @@ class OPTAttention(nn.Cell):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class OPTDecoderLayer(nn.Cell):
+class OPTDecoderLayer(nn.Module):
 
     """
     OPTDecoderLayer is a class that represents a single layer of the OPT (Optimized Performance Transformer) decoder model. 
     It implements the decoding logic for the transformer model and includes self-attention mechanism, feedforward neural network, and layer normalization.
     
-    This class inherits from nn.Cell and is designed to be used within a transformer decoder stack for sequence-to-sequence tasks.
+    This class inherits from nn.Module and is designed to be used within a transformer decoder stack for sequence-to-sequence tasks.
     
     Attributes:
         - embed_dim (int): The dimension of the hidden states in the layer.
@@ -348,11 +350,11 @@ class OPTDecoderLayer(nn.Cell):
         self.self_attn_layer_norm = nn.LayerNorm(
             [self.embed_dim], elementwise_affine=config.layer_norm_elementwise_affine
         )
-        self.fc1 = nn.Dense(self.embed_dim, config.ffn_dim, has_bias=config.enable_bias)
-        self.fc2 = nn.Dense(config.ffn_dim, self.embed_dim, has_bias=config.enable_bias)
+        self.fc1 = nn.Dense(self.embed_dim, config.ffn_dim, bias=config.enable_bias)
+        self.fc2 = nn.Dense(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
         self.final_layer_norm = nn.LayerNorm([self.embed_dim], elementwise_affine=config.layer_norm_elementwise_affine)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -473,7 +475,7 @@ with mean 0 and standard deviation 'self.config.init_std'. If the cell has a pad
         std = self.config.init_std
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(std), cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -521,12 +523,12 @@ class OPTDecoder(OPTPreTrainedModel):
         self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
 
         if config.word_embed_proj_dim != config.hidden_size:
-            self.project_out = nn.Dense(config.hidden_size, config.word_embed_proj_dim, has_bias=False)
+            self.project_out = nn.Dense(config.hidden_size, config.word_embed_proj_dim, bias=False)
         else:
             self.project_out = None
 
         if config.word_embed_proj_dim != config.hidden_size:
-            self.project_in = nn.Dense(config.word_embed_proj_dim, config.hidden_size, has_bias=False)
+            self.project_in = nn.Dense(config.word_embed_proj_dim, config.hidden_size, bias=False)
         else:
             self.project_in = None
 
@@ -540,7 +542,7 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             self.final_layer_norm = None
 
-        self.layers = nn.CellList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -582,7 +584,7 @@ class OPTDecoder(OPTPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -845,7 +847,7 @@ past key values, hidden states, and attentions.
         """
         return self.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -965,7 +967,7 @@ with various input parameters and return the output.
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
-        self.lm_head = nn.Dense(config.word_embed_proj_dim, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.word_embed_proj_dim, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1074,7 +1076,7 @@ outputs based on the input sequences. The output embeddings capture the learned 
         """
         return self.model.decoder
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1326,12 +1328,12 @@ SequenceClassifierOutputWithPast]: Constructs the sequence classification model 
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = OPTModel(config)
-        self.score = nn.Dense(config.word_embed_proj_dim, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.word_embed_proj_dim, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1480,7 +1482,7 @@ accessing and updating the input embeddings for the model.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

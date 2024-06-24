@@ -1,4 +1,4 @@
-from mindspore import nn
+from mindnlp.core import nn
 
 from mindnlp.transformers import PreTrainedModel
 

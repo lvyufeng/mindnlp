@@ -20,7 +20,10 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import ops, nn, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.nn import CrossEntropyLoss
 from mindspore.common.initializer import initializer, Normal, Uniform, HeNormal, XavierUniform
 
@@ -235,7 +238,7 @@ def _sample_negative_indices(
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2Bert
-class Wav2Vec2BertRotaryPositionalEmbedding(nn.Cell):
+class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
     """
@@ -251,7 +254,7 @@ class Wav2Vec2BertRotaryPositionalEmbedding(nn.Cell):
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         sequence_length = hidden_states.shape[1]
 
         if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
@@ -271,7 +274,7 @@ class Wav2Vec2BertRotaryPositionalEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2Bert
-class Wav2Vec2BertRelPositionalEmbedding(nn.Cell):
+class Wav2Vec2BertRelPositionalEmbedding(nn.Module):
     """Relative positional encoding module."""
 
     def __init__(self, config):
@@ -312,7 +315,7 @@ class Wav2Vec2BertRelPositionalEmbedding(nn.Cell):
         pe = ops.cat([pe_positive, pe_negative], axis=1)
         self.pe = pe.to(dtype=x.dtype)
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         self.extend_pe(hidden_states)
         start_idx = self.pe.shape[1] // 2 - hidden_states.shape[1] + 1
         end_idx = self.pe.shape[1] // 2 + hidden_states.shape[1]
@@ -321,14 +324,14 @@ class Wav2Vec2BertRelPositionalEmbedding(nn.Cell):
         return relative_position_embeddings
 
 
-class Wav2Vec2BertFeatureProjection(nn.Cell):
+class Wav2Vec2BertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
         self.projection = nn.Dense(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(p=config.feat_proj_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
@@ -336,7 +339,7 @@ class Wav2Vec2BertFeatureProjection(nn.Cell):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2BertFeedForward(nn.Cell):
+class Wav2Vec2BertFeedForward(nn.Module):
     def __init__(self, config, act_fn=None, hidden_size=None):
         super().__init__()
         act_fn = act_fn if act_fn is not None else config.hidden_act
@@ -350,7 +353,7 @@ class Wav2Vec2BertFeedForward(nn.Cell):
         self.output_dropout = nn.Dropout(p=config.hidden_dropout)
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward.forward
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
@@ -360,14 +363,15 @@ class Wav2Vec2BertFeedForward(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2BertConvolutionModule(nn.Cell):
+class Wav2Vec2BertConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
     def __init__(self, config):
         super().__init__()
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
-        self.layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
@@ -375,7 +379,7 @@ class Wav2Vec2BertConvolutionModule(nn.Cell):
             stride=1,
             pad_mode='pad',
             padding=0,
-            has_bias=False,
+            bias=False,
         )
         self.glu = nn.GLU(axis=1)
         self.depthwise_conv = nn.Conv1d(
@@ -386,10 +390,11 @@ class Wav2Vec2BertConvolutionModule(nn.Cell):
             pad_mode='pad',
             padding=0,
             group=config.hidden_size,
-            has_bias=False,
+            bias=False,
         )
 
-        self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size, eps=
+config.layer_norm_eps)
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
@@ -398,11 +403,11 @@ class Wav2Vec2BertConvolutionModule(nn.Cell):
             stride=1,
             pad_mode='pad',
             padding=0,
-            has_bias=False,
+            bias=False,
         )
         self.dropout = nn.Dropout(p=config.conformer_conv_dropout)
 
-    def construct(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states, attention_mask=None):
         hidden_states = self.layer_norm(hidden_states)
 
         # Ensure that we do not leak padded positions in depthwise convolution if attention mask is passed.
@@ -435,7 +440,7 @@ class Wav2Vec2BertConvolutionModule(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2BertSelfAttention(nn.Cell):
+class Wav2Vec2BertSelfAttention(nn.Module):
     """Construct an Wav2Vec2BertSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
@@ -457,7 +462,7 @@ class Wav2Vec2BertSelfAttention(nn.Cell):
 
         if self.position_embeddings_type == "relative":
             # linear transformation for positional encoding
-            self.linear_pos = nn.Dense(hidden_size, hidden_size, has_bias=False)
+            self.linear_pos = nn.Dense(hidden_size, hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
             self.pos_bias_u = Parameter(ops.zeros(self.num_heads, self.head_size))
@@ -469,7 +474,7 @@ class Wav2Vec2BertSelfAttention(nn.Cell):
             num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
             self.distance_embedding = nn.Embedding(num_positions, self.head_size)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -606,7 +611,7 @@ class Wav2Vec2BertSelfAttention(nn.Cell):
         return scores
 
 
-class Wav2Vec2BertEncoderLayer(nn.Cell):
+class Wav2Vec2BertEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
     def __init__(self, config):
@@ -615,11 +620,11 @@ class Wav2Vec2BertEncoderLayer(nn.Cell):
         dropout = config.attention_dropout
 
         # Feed-forward 1
-        self.ffn1_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.ffn1_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn1 = Wav2Vec2BertFeedForward(config)
 
         # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.self_attn_dropout = nn.Dropout(p=dropout)
         self.self_attn = Wav2Vec2BertSelfAttention(config)
 
@@ -627,11 +632,11 @@ class Wav2Vec2BertEncoderLayer(nn.Cell):
         self.conv_module = Wav2Vec2BertConvolutionModule(config)
 
         # Feed-forward 2
-        self.ffn2_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.ffn2_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn2 = Wav2Vec2BertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -672,7 +677,7 @@ class Wav2Vec2BertEncoderLayer(nn.Cell):
         return hidden_states, attn_weigts
 
 
-class Wav2Vec2BertEncoder(nn.Cell):
+class Wav2Vec2BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -685,9 +690,9 @@ class Wav2Vec2BertEncoder(nn.Cell):
             self.embed_positions = None
 
         self.dropout = nn.Dropout(p=config.hidden_dropout)
-        self.layers = nn.CellList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -753,16 +758,17 @@ class Wav2Vec2BertEncoder(nn.Cell):
         )
 
 
-class Wav2Vec2BertAdapter(nn.Cell):
+class Wav2Vec2BertAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
         # feature dim might need to be down-projected
         if config.output_hidden_size != config.hidden_size:
             self.proj = nn.Dense(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size, epsilon=config.layer_norm_eps)
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size, eps=
+config.layer_norm_eps)
         else:
             self.proj = self.proj_layer_norm = None
-        self.layers = nn.CellList([Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers)])
+        self.layers = nn.ModuleList([Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers)])
         self.layerdrop = config.layerdrop
 
         self.kernel_size = config.adapter_kernel_size
@@ -775,7 +781,7 @@ class Wav2Vec2BertAdapter(nn.Cell):
         seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
         return seq_lens #.floor()
 
-    def construct(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states, attention_mask=None):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -796,7 +802,7 @@ class Wav2Vec2BertAdapter(nn.Cell):
         return hidden_states
 
 
-class Wav2Vec2BertAdapterLayer(nn.Cell):
+class Wav2Vec2BertAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         embed_dim = config.output_hidden_size
@@ -806,7 +812,7 @@ class Wav2Vec2BertAdapterLayer(nn.Cell):
         self.stride = config.adapter_stride
 
         # 1. residual convolution
-        self.residual_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.residual_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.residual_conv = nn.Conv1d(
             embed_dim,
             2 * embed_dim,
@@ -818,7 +824,7 @@ class Wav2Vec2BertAdapterLayer(nn.Cell):
         self.activation = nn.GLU(axis=1)
 
         # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.self_attn_conv = nn.Conv1d(
             embed_dim,
             2 * embed_dim,
@@ -831,10 +837,10 @@ class Wav2Vec2BertAdapterLayer(nn.Cell):
         self.self_attn_dropout = nn.Dropout(p=dropout)
 
         # Feed-forward
-        self.ffn_layer_norm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn = Wav2Vec2BertFeedForward(config, act_fn=config.adapter_act, hidden_size=embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -978,7 +984,7 @@ WAV2VEC2_BERT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving etc.).
 
-    This model is a MindSpore [nn.Cell](https://pyops.org/docs/stable/nn.html#nn.Cell) sub-class. Use it as a
+    This model is a MindSpore [nn.Module](https://pyops.org/docs/stable/nn.html#nn.Module) sub-class. Use it as a
     regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage and behavior.
 
     Parameters:
@@ -1083,7 +1089,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
 
         return hidden_states
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1156,7 +1162,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1258,7 +1264,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1349,7 +1355,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
             param.requires_grad = False
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1405,7 +1411,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.AMSoftmaxLoss
-class AMSoftmaxLoss(nn.Cell):
+class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super(AMSoftmaxLoss, self).__init__()
         self.scale = scale
@@ -1414,7 +1420,7 @@ class AMSoftmaxLoss(nn.Cell):
         self.weight = Parameter(ops.randn(input_dim, num_labels), requires_grad=True)
         self.loss = nn.CrossEntropyLoss()
 
-    def construct(self, hidden_states, labels):
+    def forward(self, hidden_states, labels):
         labels = labels.flatten()
         weight = ops.normalize(self.weight, axis=0)
         hidden_states = ops.normalize(hidden_states, axis=1)
@@ -1429,7 +1435,7 @@ class AMSoftmaxLoss(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.TDNNLayer
-class TDNNLayer(nn.Cell):
+class TDNNLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
@@ -1440,7 +1446,7 @@ class TDNNLayer(nn.Cell):
         self.kernel = nn.Dense(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         # for backward compatibility, we keep nn.Dense but call F.conv1d for speed up
         hidden_states = hidden_states.swapaxes(1, 2)
         weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).swapaxes(1, 2)
@@ -1463,7 +1469,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         self.projector = nn.Dense(config.hidden_size, config.tdnn_dim[0])
 
         tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
-        self.tdnn = nn.CellList(tdnn_layers)
+        self.tdnn = nn.ModuleList(tdnn_layers)
 
         self.feature_extractor = nn.Dense(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
         self.classifier = nn.Dense(config.xvector_output_dim, config.xvector_output_dim)
@@ -1498,7 +1504,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         return input_lengths
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,

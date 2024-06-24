@@ -5,10 +5,10 @@ from typing import Dict, Optional, Callable, Set, overload, TypeVar, Any, Iterat
 import itertools
 from collections import OrderedDict, namedtuple
 
+import mindspore
 from mindspore import ops
 from ...tensor import Tensor
 from ..parameter import Parameter
-from ...patch import CorePatch
 
 T = TypeVar('T', bound='Module')
 
@@ -76,7 +76,6 @@ class Module:
     call_super_init: bool = False
     _compiled_call_impl : Optional[Callable] = None
 
-    @CorePatch()
     def __init__(self):
         """
         Calls super().__setattr__('a', a) instead of the typical self.a = a
@@ -155,7 +154,7 @@ class Module:
             raise KeyError("buffer name can't be empty string \"\"")
         elif hasattr(self, name) and name not in self._buffers:
             raise KeyError(f"attribute '{name}' already exists")
-        elif tensor is not None and not isinstance(tensor, Tensor):
+        elif tensor is not None and not isinstance(tensor, (Tensor, mindspore.Tensor)):
             raise TypeError(f"cannot assign '{type(tensor)}' object to buffer '{name}' "
                             "(torch Tensor or None required)"
                             )

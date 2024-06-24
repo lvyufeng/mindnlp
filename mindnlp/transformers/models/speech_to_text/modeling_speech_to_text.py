@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Speech2Text model."""
+"""MindSpore Speech2Text model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -20,7 +20,9 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import mindspore
 from mindspore import ops
-from mindspore import nn
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 import mindspore.common.dtype as mstype
 from mindspore import Tensor
 from mindspore.common.initializer import initializer, Normal
@@ -60,7 +62,7 @@ def shift_tokens_right(input_ids: mindspore.Tensor, pad_token_id: int, decoder_s
     return shifted_input_ids
 
 
-class Conv1dSubsampler(nn.Cell):
+class Conv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
     via gated linear units (https://arxiv.org/abs/1911.08460)
@@ -75,7 +77,7 @@ class Conv1dSubsampler(nn.Cell):
         self.out_channels = config.d_model
         self.kernel_sizes = config.conv_kernel_sizes
 
-        self.conv_layers = nn.CellList(
+        self.conv_layers = nn.ModuleList(
             [nn.Conv1d(
                 self.in_channels if i == 0 else self.mid_channels // 2,
                 self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
@@ -87,7 +89,7 @@ class Conv1dSubsampler(nn.Cell):
             for i, k in enumerate(self.kernel_sizes)]
         )
 
-    def construct(self, input_features):
+    def forward(self, input_features):
         # hidden_states = input_features.transpose(1, 2) # -> B x (C x D) x T
         hidden_states = input_features.swapaxes(1, 2)
         for conv in self.conv_layers:
@@ -98,7 +100,7 @@ class Conv1dSubsampler(nn.Cell):
         return hidden_states
 
 
-class Speech2TextSinusoidalPositionalEmbedding(nn.Cell):
+class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -138,7 +140,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Cell):
         return emb.float()
 
 
-    def construct(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
+    def forward(self, input_ids: mindspore.Tensor, past_key_values_length: int = 0):
         bsz, seq_len = input_ids.shape
         # Create the position ids from the input token ids. Any padded tokens remain padded.
         position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
@@ -168,7 +170,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
-class Speech2TextAttention(nn.Cell):
+class Speech2TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -197,15 +199,15 @@ class Speech2TextAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         key_value_states: Optional[mindspore.Tensor] = None,
@@ -330,7 +332,7 @@ SPEECH_TO_TEXT_ATTENTION_CLASSES = {"eager": Speech2TextAttention}
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
-class Speech2TextEncoderLayer(nn.Cell):
+class Speech2TextEncoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -349,7 +351,7 @@ class Speech2TextEncoderLayer(nn.Cell):
         self.fc2 = nn.Dense(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -402,7 +404,7 @@ class Speech2TextEncoderLayer(nn.Cell):
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
-class Speech2TextDecoderLayer(nn.Cell):
+class Speech2TextDecoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -432,7 +434,7 @@ class Speech2TextDecoderLayer(nn.Cell):
         self.fc2 = nn.Dense(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -533,7 +535,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
         if isinstance(cell, (nn.Dense, nn.Conv1d)):
             cell.weight.set_data(initializer(Normal(std),
                                              cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, std, cell.weight.shape)
@@ -573,8 +575,8 @@ SPEECH_TO_TEXT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Cell](https://pytorch.org/docs/stable/nn.html#torch.nn.Cell) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -698,14 +700,14 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.CellList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_features,
         attention_mask=None,
@@ -850,7 +852,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             self.padding_idx,
         )
 
-        self.layers = nn.CellList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -864,7 +866,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1098,7 +1100,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         return self.decoder
 
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1209,7 +1211,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
         self.model = Speech2TextModel(config)
-        self.lm_head = nn.Dense(config.d_model, self.config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.d_model, self.config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1226,7 +1228,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

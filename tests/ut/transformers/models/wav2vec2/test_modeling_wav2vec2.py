@@ -22,7 +22,7 @@
 # pylint: disable=import-error
 # pylint: disable=redefined-builtin
 # pylint: disable=ungrouped-imports
-""" Testing suite for the PyTorch Wav2Vec2 model. """
+""" Testing suite for the MindSpore Wav2Vec2 model. """
 
 import gc
 import math
@@ -1200,7 +1200,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
+        # clean-up as much as possible GPU memory occupied by MindSpore
         gc.collect()
 
     def _load_datasamples(self, num_samples):

@@ -274,7 +274,7 @@ an object of type AlignVisionConfig.
         self.batchnorm = nn.BatchNorm2d(self.out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the aligned vision embeddings for the given pixel values.
         
@@ -364,7 +364,7 @@ class AlignVisionExpansionLayer(nn.Module):
         self.expand_bn = nn.BatchNorm2d(num_features=out_dim, eps=config.batch_norm_eps)
         self.expand_act = ACT2FN[config.hidden_act]
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs an expansion layer for align vision.
         
@@ -431,7 +431,7 @@ class AlignVisionDepthwiseLayer(nn.Module):
         )
         self.depthwise_act = ACT2FN[config.hidden_act]
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the depthwise convolutional layer for aligning vision, applying convolution, normalization, and activation operations.
         
@@ -499,7 +499,7 @@ class AlignVisionSqueezeExciteLayer(nn.Module):
         self.act_reduce = ACT2FN[config.hidden_act]
         self.act_expand = nn.Sigmoid()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the AlignVisionSqueezeExciteLayer.
         
@@ -566,7 +566,7 @@ class AlignVisionFinalBlockLayer(nn.Module):
         )
         self.dropout = nn.Dropout(p=drop_rate)
 
-    def construct(self, embeddings: mindspore.Tensor, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, embeddings: mindspore.Tensor, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the final block layer for alignment vision.
         
@@ -679,7 +679,7 @@ class AlignVisionBlock(nn.Module):
             id_skip=id_skip,
         )
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the AlignVisionBlock for processing hidden states.
         
@@ -784,7 +784,7 @@ class AlignVisionEncoder(nn.Module):
 
         self.blocks = nn.ModuleList(blocks)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         output_hidden_states: Optional[bool] = False,
@@ -864,7 +864,7 @@ class AlignTextEmbeddings(nn.Module):
             "token_type_ids", ops.zeros(self.position_ids.shape, dtype=mindspore.int64), persistent=False
         )
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         token_type_ids: Optional[mindspore.Tensor] = None,
@@ -1041,7 +1041,7 @@ scores.
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1199,7 +1199,7 @@ class AlignTextSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the aligned text self output.
         
@@ -1312,7 +1312,7 @@ class AlignTextAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1408,7 +1408,7 @@ class AlignTextIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the intermediate representation of hidden states for aligning text in the AlignTextIntermediate class.
         
@@ -1477,7 +1477,7 @@ class AlignTextOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def construct(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor, input_tensor: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs the output tensor by performing a series of operations on the input hidden states and tensor.
         
@@ -1566,7 +1566,7 @@ class AlignTextLayer(nn.Module):
         self.intermediate = AlignTextIntermediate(config)
         self.output = AlignTextOutput(config)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1712,7 +1712,7 @@ optional outputs like next decoder cache, all hidden states, self-attentions, an
         self.layer = nn.ModuleList([AlignTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1862,7 +1862,7 @@ class AlignTextPooler(nn.Module):
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """Constructs the aligned text pooler.
         
         This method takes two parameters: self and hidden_states.
@@ -1996,7 +1996,7 @@ state and pooled output.
         """
         self.embeddings.word_embeddings = value
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2180,7 +2180,7 @@ with the specified axis and keep_dims parameters. If 'pooling_type' is set to 'm
         """
         return self.vision_model.embeddings.convolution
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2411,7 +2411,7 @@ similarity scores.
 
         return image_features
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         pixel_values: Optional[mindspore.Tensor] = None,

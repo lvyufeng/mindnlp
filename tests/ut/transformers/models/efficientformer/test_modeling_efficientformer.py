@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch EfficientFormer model. """
+""" Testing suite for the MindSpore EfficientFormer model. """
 
 
 import unittest
@@ -344,7 +344,7 @@ class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
-                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # This tests that we do not trigger the warning form MindSpore "Using a target size that is different
                     # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
                     # they have the same size." which is a symptom something in wrong for the regression problem.
                     # See https://github.com/huggingface/transformers/issues/11780

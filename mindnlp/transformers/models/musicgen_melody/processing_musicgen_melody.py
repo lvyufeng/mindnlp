@@ -85,8 +85,8 @@ class MusicgenMelodyProcessor(ProcessorMixin):
 
         Args:
             audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
-                of a NumPy array/PyTorch tensor, each audio should be a mono-stereo signal of shape (T), where T is the sample length of the audio.
+                The audio or batch of audios to be prepared. Each audio can be NumPy array or MindSpore tensor. In case
+                of a NumPy array/MindSpore tensor, each audio should be a mono-stereo signal of shape (T), where T is the sample length of the audio.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set

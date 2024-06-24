@@ -21,7 +21,9 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, XavierUniform, Uniform, HeNormal
 
 from mindnlp.utils import ModelOutput, logging, get_default_dtype
@@ -180,11 +182,11 @@ def format_speech_generation_kwargs(kwargs):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->SeamlessM4TConformer, feat_extract_activation->speech_encoder_hidden_act
-class SeamlessM4TConformerPositionalConvEmbedding(nn.Cell):
+class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
 
     """
     A Python class representing a SeamlessM4TConformerPositionalConvEmbedding, which is used for positional convolutional embedding within a Conformer neural network model. 
-    This class inherits from nn.Cell and includes functionality for applying convolution operations with specific configurations for padding and grouping.
+    This class inherits from nn.Module and includes functionality for applying convolution operations with specific configurations for padding and grouping.
     
     Attributes:
         - conv: nn.Conv1d
@@ -238,7 +240,7 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Cell):
         self.padding = SeamlessM4TConformerSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.speech_encoder_hidden_act]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the positional convolutional embedding for the SeamlessM4TConformerPositionalConvEmbedding class.
         
@@ -265,7 +267,7 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Cell):
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2->SeamlessM4T, num_attention_heads->speech_encoder_attention_heads
-class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Cell):
+class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
     """
@@ -295,7 +297,7 @@ used for calculating the inverse frequency. It is expected to be a valid configu
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the rotary positional embeddings for the SeamlessM4TConformerRotaryPositionalEmbedding.
         
@@ -328,7 +330,7 @@ used for calculating the inverse frequency. It is expected to be a valid configu
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2->SeamlessM4T
-class SeamlessM4TConformerRelPositionalEmbedding(nn.Cell):
+class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
     """Relative positional encoding module."""
     def __init__(self, config):
         """
@@ -402,7 +404,7 @@ instance.
         pe = ops.cat([pe_positive, pe_negative], axis=1)
         self.pe = pe.to(dtype=x.dtype)
 
-    def construct(self, hidden_states: mindspore.Tensor):
+    def forward(self, hidden_states: mindspore.Tensor):
         """
         Constructs the relative positional embeddings for the SeamlessM4TConformer model.
         
@@ -441,12 +443,12 @@ input sequence, which is important for tasks such as machine translation.
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSamePadLayer with Wav2Vec2->SeamlessM4T
-class SeamlessM4TConformerSamePadLayer(nn.Cell):
+class SeamlessM4TConformerSamePadLayer(nn.Module):
 
     """
     This class represents a seamless M4T Conformer layer with same padding.
     
-    Inherits from nn.Cell.
+    Inherits from nn.Module.
     
     Attributes:
         num_pad_remove (int): The number of padding elements to remove from the input sequence.
@@ -473,7 +475,7 @@ class SeamlessM4TConformerSamePadLayer(nn.Cell):
         super().__init__()
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the hidden states by removing padding from the input tensor.
         
@@ -495,11 +497,11 @@ class SeamlessM4TConformerSamePadLayer(nn.Cell):
         return hidden_states
 
 
-class SeamlessM4TConformerFeatureProjection(nn.Cell):
+class SeamlessM4TConformerFeatureProjection(nn.Module):
 
     """
     This class represents a feature projection module for the SeamlessM4TConformer model. 
-    It inherits from the nn.Cell class.
+    It inherits from the nn.Module class.
     
     The feature projection module consists of a layer normalization, a dense projection layer, 
     and a dropout layer. It takes in hidden states as input and applies layer normalization, 
@@ -537,11 +539,11 @@ class SeamlessM4TConformerFeatureProjection(nn.Cell):
             None.
         """
         super().__init__()
-        self.layer_norm = nn.LayerNorm([config.feature_projection_input_dim], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.feature_projection_input_dim], eps=config.layer_norm_eps)
         self.projection = nn.Dense(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(p=config.speech_encoder_dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Method to construct the feature projection in the SeamlessM4TConformerFeatureProjection class.
         
@@ -562,11 +564,11 @@ class SeamlessM4TConformerFeatureProjection(nn.Cell):
         return hidden_states
 
 
-class SeamlessM4TConformerFeedForward(nn.Cell):
+class SeamlessM4TConformerFeedForward(nn.Module):
 
     """
     The SeamlessM4TConformerFeedForward class represents a feed-forward neural network module for the SeamlessM4TConformer model. 
-    It inherits from the nn.Cell class and contains methods for initializing the network and constructing the feed-forward operations.
+    It inherits from the nn.Module class and contains methods for initializing the network and constructing the feed-forward operations.
     
     Attributes:
         config: The configuration parameters for the feed-forward network.
@@ -617,7 +619,7 @@ class SeamlessM4TConformerFeedForward(nn.Cell):
         self.output_dense = nn.Dense(config.speech_encoder_intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(p=dropout)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the feed forward layer for the SeamlessM4TConformerFeedForward class.
         
@@ -642,7 +644,7 @@ class SeamlessM4TConformerFeedForward(nn.Cell):
         return hidden_states
 
 
-class SeamlessM4TConformerConvolutionModule(nn.Cell):
+class SeamlessM4TConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
     def __init__(self, config):
         """
@@ -672,7 +674,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Cell):
             kernel_size=1,
             stride=1,
             padding=0,
-            has_bias=False,
+            bias=False,
         )
         self.glu = nn.GLU(axis=1)
         self.depthwise_conv = nn.Conv1d(
@@ -682,7 +684,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Cell):
             stride=1,
             pad_mode="same",
             group=config.hidden_size,
-            has_bias=False,
+            bias=False,
         )
         self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.speech_encoder_hidden_act]
@@ -692,11 +694,11 @@ class SeamlessM4TConformerConvolutionModule(nn.Cell):
             kernel_size=1,
             stride=1,
             padding=0,
-            has_bias=False,
+            bias=False,
         )
         self.dropout = nn.Dropout(p=config.speech_encoder_dropout)
 
-    def construct(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states, attention_mask=None):
         """
         Constructs the SeamlessM4TConformerConvolutionModule.
         
@@ -742,7 +744,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Cell):
         return hidden_states
 
 
-class SeamlessM4TConformerSelfAttention(nn.Cell):
+class SeamlessM4TConformerSelfAttention(nn.Module):
     """Construct a SeamlessM4TConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
@@ -776,14 +778,14 @@ class SeamlessM4TConformerSelfAttention(nn.Cell):
 
         if self.position_embeddings_type == "relative":
             # linear transformation for positional encoding
-            self.linear_pos = nn.Dense(config.hidden_size, config.hidden_size, has_bias=False)
+            self.linear_pos = nn.Dense(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
             self.pos_bias_u = Parameter(ops.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = Parameter(ops.zeros(self.num_heads, self.head_size))
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention.forward
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -959,7 +961,7 @@ output_attentions is True.
         return scores
 
 
-class SeamlessM4TConformerEncoderLayer(nn.Cell):
+class SeamlessM4TConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4T, attention_dropout->speech_encoder_dropout, ops.nn->nn
     def __init__(self, config):
@@ -1000,7 +1002,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Cell):
         self.ffn2 = SeamlessM4TConformerFeedForward(config)
         self.final_layer_norm = nn.LayerNorm([embed_dim])
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1058,7 +1060,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Cell):
         return hidden_states, attn_weigts
 
 
-class SeamlessM4TConformerEncoder(nn.Cell):
+class SeamlessM4TConformerEncoder(nn.Module):
 
     """
     This class represents a SeamlessM4TConformerEncoder which is responsible for encoding input sequences using a Conformer model architecture. 
@@ -1066,7 +1068,7 @@ class SeamlessM4TConformerEncoder(nn.Cell):
     
     Parameters:
     - config: An object containing configuration parameters for the encoder.
-    - Inherits from: nn.Cell
+    - Inherits from: nn.Module
     
     Methods:
     - __init__(self, config): Initializes the SeamlessM4TConformerEncoder with the provided configuration. Sets up positional embeddings based on the specified type, dropout, encoder layers, layer
@@ -1115,15 +1117,15 @@ encoder layer. It applies dropout, handles attention masks, and computes relativ
             self.embed_positions = None
 
         self.dropout = nn.Dropout(p=config.speech_encoder_dropout)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [SeamlessM4TConformerEncoderLayer(config) for _ in range(config.speech_encoder_layers)]
         )
 
-        self.layer_norm = nn.LayerNorm([config.hidden_size], epsilon=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm([config.hidden_size], eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask=None,
@@ -1214,13 +1216,13 @@ encoder layer. It applies dropout, handles attention masks, and computes relativ
         )
 
 
-class SeamlessM4TConformerAdapterLayer(nn.Cell):
+class SeamlessM4TConformerAdapterLayer(nn.Module):
 
     """
     The `SeamlessM4TConformerAdapterLayer` class is a Python class that represents a layer in the SeamlessM4TConformer adapter model. This layer is used to adapt the input hidden states using self-attention
 and feed-forward networks.
     
-    This class inherits from the `nn.Cell` class.
+    This class inherits from the `nn.Module` class.
     
     Attributes:
     - `kernel_size` (int): The size of the kernel used in the convolutional layers.
@@ -1344,7 +1346,7 @@ and feed-forward networks.
 
         return seq_lens.astype(mindspore.float32).floor()
 
-    def construct(
+    def forward(
         self,
         hidden_states,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1413,14 +1415,14 @@ and feed-forward networks.
         return hidden_states
 
 
-class SeamlessM4TConformerAdapter(nn.Cell):
+class SeamlessM4TConformerAdapter(nn.Module):
 
     """
     This class represents a seamless multi-task (M4T) Conformer adapter, designed for adapting transformer-based models for multi-task learning. The adapter consists of multiple adapter layers that can be
 stacked on top of each other to adapt the model's hidden states for different tasks.
     
     Attributes:
-        layers (nn.CellList): A list of SeamlessM4TConformerAdapterLayer instances, each representing an adapter layer in the adapter stack.
+        layers (nn.ModuleList): A list of SeamlessM4TConformerAdapterLayer instances, each representing an adapter layer in the adapter stack.
     
     Methods:
         __init__(config):
@@ -1456,9 +1458,9 @@ stacked on top of each other to adapt the model's hidden states for different ta
         """
         super().__init__()
 
-        self.layers = nn.CellList([SeamlessM4TConformerAdapterLayer(config) for _ in range(config.num_adapter_layers)])
+        self.layers = nn.ModuleList([SeamlessM4TConformerAdapterLayer(config) for _ in range(config.num_adapter_layers)])
 
-    def construct(self, hidden_states, attention_mask):
+    def forward(self, hidden_states, attention_mask):
         """
         Constructs the SeamlessM4TConformerAdapter by applying the layers to the input hidden states.
         
@@ -1486,7 +1488,7 @@ stacked on top of each other to adapt the model's hidden states for different ta
 
 
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
-class SeamlessM4TSinusoidalPositionalEmbedding(nn.Cell):
+class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         """
@@ -1556,7 +1558,7 @@ generated weights is converted to match the existing weights. Finally, the gener
 
         return emb.to(get_default_dtype())
 
-    def construct(
+    def forward(
         self, input_ids: mindspore.Tensor = None, inputs_embeds: mindspore.Tensor = None, past_key_values_length: int = 0
     ):
         ''' 
@@ -1607,7 +1609,7 @@ generated weights is converted to match the existing weights. Finally, the gener
         return position_ids.unsqueeze(0).expand(input_shape)+ past_key_values_length
 
 
-class SeamlessM4TAttention(nn.Cell):
+class SeamlessM4TAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     # Copied from transformers.models.bart.modeling_bart.BartAttention.__init__ with Bart->SeamlessM4T
     def __init__(
@@ -1654,10 +1656,10 @@ class SeamlessM4TAttention(nn.Cell):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
-        self.k_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.v_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.q_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
-        self.out_proj = nn.Dense(embed_dim, embed_dim, has_bias=bias)
+        self.k_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Dense(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -1677,7 +1679,7 @@ class SeamlessM4TAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         encoder_hidden_states: Optional[mindspore.Tensor] = None,
@@ -1788,11 +1790,11 @@ class SeamlessM4TAttention(nn.Cell):
 
 
 # Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork, d_model->hidden_size
-class SeamlessM4TFeedForwardNetwork(nn.Cell):
+class SeamlessM4TFeedForwardNetwork(nn.Module):
 
     """
     The SeamlessM4TFeedForwardNetwork class represents a feedforward network for the SeamlessM4T model. 
-    It inherits from the nn.Cell class and is designed to handle feedforward operations for the SeamlessM4T model.
+    It inherits from the nn.Module class and is designed to handle feedforward operations for the SeamlessM4T model.
     
     Attributes:
         config (SeamlessM4TConfig): An instance of SeamlessM4TConfig class containing configuration parameters.
@@ -1830,7 +1832,7 @@ class SeamlessM4TFeedForwardNetwork(nn.Cell):
         self.dropout = nn.Dropout(p=config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the forward pass of the SeamlessM4TFeedForwardNetwork.
         
@@ -1858,12 +1860,12 @@ class SeamlessM4TFeedForwardNetwork(nn.Cell):
         return hidden_states
 
 
-class SeamlessM4TEncoderLayer(nn.Cell):
+class SeamlessM4TEncoderLayer(nn.Module):
 
     """
     The SeamlessM4TEncoderLayer class represents a single layer of the SeamlessM4T model encoder. It includes self-attention and feed-forward network components.
     
-    This class inherits from the nn.Cell class and is initialized with a SeamlessM4TConfig object, encoder_ffn_dim, and encoder_attention_heads. The class also features a 'construct' method that takes
+    This class inherits from the nn.Module class and is initialized with a SeamlessM4TConfig object, encoder_ffn_dim, and encoder_attention_heads. The class also features a 'construct' method that takes
 hidden_states and attention_mask as input and returns the output tensor.
     
     Attributes:
@@ -1923,7 +1925,7 @@ network layer normalization is initialized with the hidden size specified in the
         self.ffn_layer_norm = nn.LayerNorm([config.hidden_size])
         self.ffn_dropout = nn.Dropout(p=config.activation_dropout)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -1964,12 +1966,12 @@ network layer normalization is initialized with the hidden size specified in the
         return outputs
 
 
-class SeamlessM4TDecoderLayer(nn.Cell):
+class SeamlessM4TDecoderLayer(nn.Module):
 
     """
     SeamlessM4TDecoderLayer represents a decoder layer in the SeamlessM4T model architecture for machine translation. 
     This class implements the decoder layer functionality with self-attention, cross-attention, feed-forward network, and layer normalization.
-    It inherits from nn.Cell and is designed to be used within a larger Transformer model for translation tasks.
+    It inherits from nn.Module and is designed to be used within a larger Transformer model for translation tasks.
     
     Attributes:
         - config (SeamlessM4TConfig): Configuration object containing parameters for the decoder layer.
@@ -2039,7 +2041,7 @@ class SeamlessM4TDecoderLayer(nn.Cell):
         self.ffn_layer_norm = nn.LayerNorm([config.hidden_size])
         self.ffn_dropout = nn.Dropout(p=config.activation_dropout)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2315,7 +2317,7 @@ return_dict: Optional[bool] = None, **kwargs) -> Union[Tuple, Wav2Vec2BaseModelO
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_features: Optional[mindspore.Tensor],
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2402,7 +2404,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         - embed_scale (float): The scale factor for the embedding vectors.
         - embed_tokens (nn.Embedding): The embedding layer for the input tokens.
         - embed_positions (SeamlessM4TSinusoidalPositionalEmbedding): The positional embedding layer.
-        - layers (nn.CellList): The list of encoder layers.
+        - layers (nn.ModuleList): The list of encoder layers.
         - layer_norm (nn.LayerNorm): The layer normalization layer.
         - gradient_checkpointing (bool): A flag indicating whether to use gradient checkpointing during training.
         
@@ -2469,7 +2471,7 @@ output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None,
                 )
             )
 
-        self.layers = nn.CellList(layers)
+        self.layers = nn.ModuleList(layers)
 
         self.layer_norm = nn.LayerNorm([config.hidden_size])
 
@@ -2477,7 +2479,7 @@ output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None,
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2689,7 +2691,7 @@ sets 'embed_scale' to 1.0.
         10. Creates a 'SeamlessM4TSinusoidalPositionalEmbedding' object named 'self.embed_positions' with 'self.max_target_positions', 'config.hidden_size', and 'self.padding_idx' as arguments.
         11. Creates a list named 'layers'.
         12. Iterates 'config.decoder_layers' times and appends a 'SeamlessM4TDecoderLayer' object to 'layers', using 'config', 'config.decoder_attention_heads', and 'config.decoder_ffn_dim' as arguments.
-        13. Sets the 'layers' attribute to a 'nn.CellList' containing the objects in 'layers'.
+        13. Sets the 'layers' attribute to a 'nn.ModuleList' containing the objects in 'layers'.
         14. Creates a 'nn.LayerNorm' object named 'self.layer_norm' with a list containing 'config.hidden_size' as the argument.
         15. Sets the 'gradient_checkpointing' attribute to False.
         16. Calls the 'post_init' method.
@@ -2726,7 +2728,7 @@ sets 'embed_scale' to 1.0.
                     decoder_ffn_dim=config.decoder_ffn_dim,
                 )
             )
-        self.layers = nn.CellList(layers)
+        self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm([config.hidden_size])
 
         self.gradient_checkpointing = False
@@ -2764,7 +2766,7 @@ sets 'embed_scale' to 1.0.
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -2974,7 +2976,7 @@ input, attention, and output settings, as well as the option to return a diction
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3147,7 +3149,7 @@ Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[Seq2SeqLMOut
 
         self.model = SeamlessM4TTextToUnitModel(config, embed_tokens_decoder)
 
-        self.lm_head = nn.Dense(config.hidden_size, config.t2u_vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.t2u_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3244,7 +3246,7 @@ Optional[bool] = None, return_dict: Optional[bool] = None) -> Union[Seq2SeqLMOut
         """
         self.model.decoder.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -3467,8 +3469,8 @@ HIFIGAN_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [ops.nn.Cell](https://pyops.org/docs/stable/nn.html#ops.nn.Cell) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a MindSpore [ops.nn.Module](https://pyops.org/docs/stable/nn.html#ops.nn.Module) subclass.
+    Use it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -3480,10 +3482,10 @@ HIFIGAN_START_DOCSTRING = r"""
 
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
-class HifiGanResidualBlock(nn.Cell):
+class HifiGanResidualBlock(nn.Module):
 
     """
-    This class represents a High Fidelity Generative Adversarial Network (HifiGan) Residual Block. It is a subclass of nn.Cell and is used in the construction of the HifiGan model.
+    This class represents a High Fidelity Generative Adversarial Network (HifiGan) Residual Block. It is a subclass of nn.Module and is used in the construction of the HifiGan model.
     
     Attributes:
         channels (int): The number of input and output channels for the convolutional layers.
@@ -3508,7 +3510,7 @@ class HifiGanResidualBlock(nn.Cell):
             Constructs the HifiGanResidualBlock by applying the convolutional layers and residual connections to the input hidden states.
     
     Note:
-        The HifiGanResidualBlock class inherits from nn.Cell, which is a base class for all neural network modules in MindSpore. It provides basic functionalities for constructing and managing neural networks.
+        The HifiGanResidualBlock class inherits from nn.Module, which is a base class for all neural network modules in MindSpore. It provides basic functionalities for constructing and managing neural networks.
     """
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
         """
@@ -3532,7 +3534,7 @@ class HifiGanResidualBlock(nn.Cell):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
-        self.convs1 = nn.CellList(
+        self.convs1 = nn.ModuleList(
             [
                 nn.Conv1d(
                     channels,
@@ -3546,7 +3548,7 @@ class HifiGanResidualBlock(nn.Cell):
                 for i in range(len(dilation))
             ]
         )
-        self.convs2 = nn.CellList(
+        self.convs2 = nn.ModuleList(
             [
                 nn.Conv1d(
                     channels,
@@ -3617,7 +3619,7 @@ then returns the calculated padding size as an integer value.
         for layer in self.convs2:
             nn.utils.remove_weight_norm(layer)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs a single residual block in the HifiGan model.
         
@@ -3642,10 +3644,10 @@ then returns the calculated padding size as an integer value.
         return hidden_states
 
 
-class SeamlessM4TVariancePredictor(nn.Cell):
+class SeamlessM4TVariancePredictor(nn.Module):
 
     """
-    This class represents a variance predictor module used in the SeamlessM4T model. It is a subclass of the nn.Cell class.
+    This class represents a variance predictor module used in the SeamlessM4T model. It is a subclass of the nn.Module class.
     
     Attributes:
         - conv1 (nn.Conv1d): A 1-dimensional convolutional layer that processes the input hidden states.
@@ -3704,7 +3706,7 @@ class SeamlessM4TVariancePredictor(nn.Cell):
         self.ln2 = nn.LayerNorm([embed_dim])
         self.proj = nn.Dense(embed_dim, 1)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the SeamlessM4TVariancePredictor by processing the hidden_states tensor.
         
@@ -3729,12 +3731,12 @@ class SeamlessM4TVariancePredictor(nn.Cell):
         return self.proj(hidden_states).squeeze(axis=2)
 
 
-class SeamlessM4THifiGan(nn.Cell):
+class SeamlessM4THifiGan(nn.Module):
 
     """
     This class represents a SeamlessM4THifiGan, a neural network model for converting log-mel spectrograms into speech waveforms. 
     
-    The class inherits from nn.Cell and contains methods for initializing the model and constructing the speech waveform from input log-mel spectrograms.
+    The class inherits from nn.Module and contains methods for initializing the model and constructing the speech waveform from input log-mel spectrograms.
     
     Attributes:
         - `config`: The configuration object containing various model parameters such as embedding dimensions, kernel sizes, and stride rates.
@@ -3800,7 +3802,7 @@ class SeamlessM4THifiGan(nn.Cell):
             padding=3,
         )
 
-        self.upsampler = nn.CellList()
+        self.upsampler = nn.ModuleList()
         for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
             self.upsampler.append(
                 nn.Conv1dTranspose(
@@ -3813,7 +3815,7 @@ class SeamlessM4THifiGan(nn.Cell):
                 )
             )
 
-        self.resblocks = nn.CellList()
+        self.resblocks = nn.ModuleList()
         for i in range(len(self.upsampler)):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
@@ -3821,7 +3823,7 @@ class SeamlessM4THifiGan(nn.Cell):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, pad_mode='pad', padding=3)
 
-    def construct(self, input_embeds: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, input_embeds: mindspore.Tensor) -> mindspore.Tensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
@@ -3957,7 +3959,7 @@ includes utility functions for weight normalization operations.
 
         return input_lengths
 
-    def construct(
+    def forward(
         self, input_ids: mindspore.Tensor, spkr_id: mindspore.Tensor, lang_id: mindspore.Tensor
     ) -> Tuple[mindspore.Tensor]:
         """
@@ -4156,7 +4158,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
         self.text_encoder = SeamlessM4TEncoder(config, self.shared)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -4275,7 +4277,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -4634,7 +4636,7 @@ input features and target language.
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -4769,7 +4771,7 @@ provided as-is.
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    def construct(
+    def forward(
         self,
         input_features: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -5131,7 +5133,7 @@ output_hidden_states, return_dict): Constructs the SeamlessM4T model for text-to
 
         self.text_encoder = SeamlessM4TEncoder(config, self.shared)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -5259,7 +5261,7 @@ parameters of the specified modules will be shared, resulting in a reduced numbe
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -5675,7 +5677,7 @@ output_hidden_states, return_dict, **kwargs)`: Constructs the speech-to-speech t
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -5793,7 +5795,7 @@ output_hidden_states, return_dict, **kwargs)`: Constructs the speech-to-speech t
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    def construct(
+    def forward(
         self,
         input_features: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -6212,7 +6214,7 @@ output_hidden_states, return_dict, **kwargs): Constructs the SeamlessM4TModel.
         self.text_encoder = SeamlessM4TEncoder(config, self.shared)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -6355,7 +6357,7 @@ obtained by calling the 'embed_tokens' method of the text decoder. The 'embed_to
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         input_features: Optional[mindspore.Tensor] = None,

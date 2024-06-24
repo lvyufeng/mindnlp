@@ -21,7 +21,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import Normal
 
 from ...activations import ACT2FN
@@ -52,12 +55,12 @@ PHI3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Phi3
-class Phi3RMSNorm(nn.Cell):
+class Phi3RMSNorm(nn.Module):
 
     """ 
         Phi3RMSNorm is a custom normalization layer that performs the Phi3 RMS normalization, equivalent to T5LayerNorm.
     
-        This class inherits from the nn.Cell class in the MindSpore framework.
+        This class inherits from the nn.Module class in the MindSpore framework.
     
         Attributes:
             weight (Parameter): The weight parameter for the normalization layer.
@@ -78,7 +81,7 @@ class Phi3RMSNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs Phi3RMSNorm by performing normalization on the hidden_states.
         
@@ -132,10 +135,10 @@ computed along the 0th axis of the seqlens_in_batch tensor, which is obtained by
 
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
-class Phi3RotaryEmbedding(nn.Cell):
+class Phi3RotaryEmbedding(nn.Module):
 
     """
-    This class represents the Phi3RotaryEmbedding, a rotary positional embedding layer used in neural network models. It is a subclass of nn.Cell.
+    This class represents the Phi3RotaryEmbedding, a rotary positional embedding layer used in neural network models. It is a subclass of nn.Module.
     
     The Phi3RotaryEmbedding class provides methods for constructing rotary embeddings based on input tensors and position IDs. It utilizes cosine and sine functions to generate embeddings with rotational
 properties.
@@ -179,7 +182,7 @@ properties.
         self.base = base
         self.inv_freq = None
 
-    def construct(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids, seq_len=None):
         '''
         This method constructs the rotary embedding for the Phi3RotaryEmbedding class.
         
@@ -261,7 +264,7 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.long_factor = config.rope_scaling["long_factor"]
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
-    def construct(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids, seq_len=None):
         """
         Constructs the scaled rotary embedding for the Phi3SuScaledRotaryEmbedding.
         
@@ -346,7 +349,7 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
         self.long_factor = config.rope_scaling["long_factor"]
         self.original_max_position_embeddings = config.original_max_position_embeddings
 
-    def construct(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids, seq_len=None):
         """
         Constructs the Phi3YarnScaledRotaryEmbedding.
         
@@ -428,10 +431,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class Phi3MLP(nn.Cell):
+class Phi3MLP(nn.Module):
 
     """
-    This class represents a multi-layer perceptron (MLP) module with a Phi3 activation function. It inherits from the nn.Cell class.
+    This class represents a multi-layer perceptron (MLP) module with a Phi3 activation function. It inherits from the nn.Module class.
     
     The Phi3MLP module is used for processing hidden states in a neural network. It consists of an up projection layer, a gate activation function, and a down projection layer.
     
@@ -474,12 +477,12 @@ class Phi3MLP(nn.Cell):
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Dense(config.hidden_size, 2 * config.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(config.intermediate_size, config.hidden_size, has_bias=False)
+        self.gate_up_proj = nn.Dense(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Dense(config.intermediate_size, config.hidden_size, bias=False)
 
         self.activation_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         This method constructs and processes the hidden states using the Phi3MLP class.
         
@@ -514,7 +517,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Phi3Attention(nn.Cell):
+class Phi3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config: Phi3Config, layer_idx: Optional[int] = None):
         """
@@ -584,8 +587,8 @@ creating this class.
             )
 
         op_size = self.num_heads * self.head_dim + 2 * (self.num_key_value_heads * self.head_dim)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
-        self.qkv_proj = nn.Dense(self.hidden_size, op_size, has_bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.qkv_proj = nn.Dense(self.hidden_size, op_size, bias=False)
         self._init_rope()
 
     def _init_rope(self):
@@ -638,7 +641,7 @@ options for the Rotary Positional Encoding.
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -742,12 +745,12 @@ PHI3_ATTENTION_CLASSES = {
 }
 
 
-class Phi3DecoderLayer(nn.Cell):
+class Phi3DecoderLayer(nn.Module):
 
     '''
     Phi3DecoderLayer represents a single layer of the Phi3 decoder. This layer includes self-attention, residual connections, layer normalization, and a multi-layer perceptron (MLP) sublayer. 
     
-    This class inherits from the nn.Cell class and is designed to be used as a building block for constructing Phi3 decoder models.
+    This class inherits from the nn.Module class and is designed to be used as a building block for constructing Phi3 decoder models.
     
     The __init__ method initializes the Phi3DecoderLayer with the provided configuration and layer index. It sets up the self-attention mechanism, MLP, input layer normalization, and dropout layers.
     
@@ -815,7 +818,7 @@ based on the provided arguments.
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
         self.post_attention_layernorm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1001,7 +1004,7 @@ hyperparameters for the model.
 embedding layer is responsible for converting input tokens to their corresponding embeddings.
         5. Initializes the 'embed_dropout' attribute as an instance of the nn.Dropout class. It takes the 'embd_pdrop' value from the 'config' object as a parameter. This dropout layer is applied to the
 embeddings.
-        6. Initializes the 'layers' attribute as an instance of the nn.CellList class. It contains Phi3DecoderLayer instances, one for each layer index from 0 to 'num_hidden_layers' - 1 (inclusive). Each
+        6. Initializes the 'layers' attribute as an instance of the nn.ModuleList class. It contains Phi3DecoderLayer instances, one for each layer index from 0 to 'num_hidden_layers' - 1 (inclusive). Each
 Phi3DecoderLayer is initialized with the 'config' object and the corresponding layer index.
         7. Sets the '_attn_implementation' attribute to the '_attn_implementation' value from the 'config' object. This value represents the implementation type of the attention mechanism.
         8. Initializes the 'norm' attribute as an instance of the Phi3RMSNorm class. It takes the 'hidden_size' and 'eps' values from the 'config' object as parameters. This layer applies root mean square
@@ -1018,7 +1021,7 @@ normalization to the hidden states.
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [Phi3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
@@ -1059,7 +1062,7 @@ normalization to the hidden states.
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1280,7 +1283,7 @@ and preparing inputs for generation.
         super().__init__(config)
         self.model = Phi3Model(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1385,7 +1388,7 @@ and preparing inputs for generation.
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1614,7 +1617,7 @@ classification.
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Phi3Model(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1661,7 +1664,7 @@ classification.
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1802,7 +1805,7 @@ using cross-entropy and returns the loss along with logits and hidden states if 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[mindspore.Tensor, mindspore.Tensor], ...]] = None,

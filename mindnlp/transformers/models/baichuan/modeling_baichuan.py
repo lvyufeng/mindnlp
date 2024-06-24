@@ -26,12 +26,13 @@ from threading import Thread
 
 import numpy as np
 import mindspore
-from mindspore import Tensor, Parameter
-from mindspore import nn, ops
-from mindspore.common.initializer import initializer, Normal
+from mindspore import ops
 from mindspore import dtype as mstype
-from mindnlp.utils import logging
 
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+from mindnlp.core.nn.init import initializer, Normal
+from mindnlp.utils import logging
 from .configuration_baichuan import BaiChuanConfig
 from ...generation.utils import GenerationConfig
 from ...modeling_utils import PreTrainedModel
@@ -353,11 +354,12 @@ def _buffered_future_mask(tensor, maxpos, alibi, attn_heads):
     return _future_mask[:tensor.shape[0] * attn_heads, :maxpos, :maxpos]
 
 
-class RMSNorm(nn.Cell):
+class RMSNorm(nn.Module):
     """
     RMSNorm
     """
-    def __init__(self, hidden_size, epsilon=1e-6):
+    def __init__(self, hidden_size, eps=
+1e-6):
         """
         RMSNorm is equivalent to T5LayerNorm
         """
@@ -365,7 +367,7 @@ class RMSNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size), 'weight')
         self.variance_epsilon = epsilon
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method constructs RMSNorm by normalizing the hidden states.
         
@@ -390,7 +392,7 @@ class RMSNorm(nn.Cell):
         return self.weight * hidden_states
 
 
-class RotaryEmbedding(nn.Cell):
+class RotaryEmbedding(nn.Module):
     """
     RotaryEmbedding
     """
@@ -425,7 +427,7 @@ class RotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos()[None, None, :, :]
         self.sin_cached = emb.sin()[None, None, :, :]
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Constructs the rotary embedding for a given sequence length.
         
@@ -493,7 +495,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-class MLP(nn.Cell):
+class MLP(nn.Module):
     """
     MLP
     """
@@ -522,12 +524,12 @@ class MLP(nn.Cell):
             No specific exceptions are raised within this method.
         """
         super().__init__()
-        self.gate_proj = nn.Dense(hidden_size, intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(intermediate_size, hidden_size, has_bias=False)
-        self.up_proj = nn.Dense(hidden_size, intermediate_size, has_bias=False)
+        self.gate_proj = nn.Dense(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Dense(intermediate_size, hidden_size, bias=False)
+        self.up_proj = nn.Dense(hidden_size, intermediate_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Method 'construct' in class 'MLP' constructs a multi-layer perceptron.
         
@@ -544,7 +546,7 @@ class MLP(nn.Cell):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-class Attention(nn.Cell):
+class Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config: BaiChuanConfig):
         """
@@ -577,8 +579,8 @@ class Attention(nn.Cell):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.W_pack = nn.Dense(self.hidden_size, 3 * self.hidden_size, has_bias=False)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.W_pack = nn.Dense(self.hidden_size, 3 * self.hidden_size, bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self.rotary_emb = RotaryEmbedding(self.head_dim, max_position_embeddings=self.max_position_embeddings)
 
     def _shape(self, tensor: Tensor, seq_len: int, bsz: int):
@@ -600,7 +602,7 @@ class Attention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
             self,
             hidden_states: Tensor,
             attention_mask: Optional[Tensor] = None,
@@ -688,11 +690,11 @@ class Attention(nn.Cell):
         return attn_output, attn_weights, past_key_value
 
 
-class BaiChuanAttention(nn.Cell):
+class BaiChuanAttention(nn.Module):
 
     """
     BaiChuanAttention class represents an attention mechanism component used in neural network models. It is designed to calculate attention weights and apply them to the input hidden states to generate the
-final output. This class inherits from nn.Cell.
+final output. This class inherits from nn.Module.
     
     Attributes:
         config (BaiChuanConfig): An instance of BaiChuanConfig containing configuration parameters for the attention mechanism.
@@ -754,8 +756,8 @@ caching is enabled).
             raise ValueError(
                 f"hidden_size {self.hidden_size} is not divisible by num_heads {self.num_heads}"
             )
-        self.W_pack = nn.Dense(self.hidden_size, 3 * self.hidden_size, has_bias=False)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.W_pack = nn.Dense(self.hidden_size, 3 * self.hidden_size, bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def _shape(self, tensor: mindspore.Tensor, seq_len: int, bsz: int):
         """
@@ -790,7 +792,7 @@ caching is enabled).
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -863,7 +865,7 @@ caching is enabled).
         return attn_output, attn_weights, past_key_value
 
 
-class DecoderLayer(nn.Cell):
+class DecoderLayer(nn.Module):
     """
     DecoderLayer
     """
@@ -893,10 +895,12 @@ class DecoderLayer(nn.Cell):
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: Tensor,
             attention_mask: Optional[Tensor] = None,
@@ -949,10 +953,10 @@ class DecoderLayer(nn.Cell):
 
         return outputs
 
-class BaiChuanLayer(nn.Cell):
+class BaiChuanLayer(nn.Module):
 
     ''' 
-    The BaiChuanLayer class represents a layer used for implementing a specific type of neural network cell. This class inherits from the nn.Cell class. 
+    The BaiChuanLayer class represents a layer used for implementing a specific type of neural network cell. This class inherits from the nn.Module class. 
     
     Attributes:
         hidden_size (int): The size of the hidden layer.
@@ -1000,10 +1004,12 @@ optional present key value computed during attention.
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
-    def construct(
+    def forward(
             self,
             hidden_states: mindspore.Tensor,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1123,8 +1129,9 @@ class BaiChuan7bModel(BaiChuanPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
-        self.layers = nn.CellList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1200,7 +1207,7 @@ class BaiChuan7bModel(BaiChuanPreTrainedModel):
 
         return combined_attention_mask
 
-    def construct(
+    def forward(
             self,
             input_ids: Tensor = None,
             attention_mask: Optional[Tensor] = None,
@@ -1338,7 +1345,7 @@ class BaiChuan13bModel(BaiChuanPreTrainedModel):
         - vocab_size (int): The size of the vocabulary.
         - n_head (int): The number of attention heads.
         - embed_tokens (nn.Embedding): The embedding layer for input tokens.
-        - layers (nn.CellList): A list of BaiChuanLayer instances representing the layers of the model.
+        - layers (nn.ModuleList): A list of BaiChuanLayer instances representing the layers of the model.
         - norm (RMSNorm): The normalization layer applied after the model layers.
         - max_cache_pos (int): The maximum position of past key values for caching.
         - first_run (bool): A flag indicating if it is the first run of the model.
@@ -1380,8 +1387,9 @@ num_attention_heads, hidden_size, num_hidden_layers, rms_norm_eps, and model_max
         self.vocab_size = config.vocab_size
         self.n_head = config.num_attention_heads
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
-        self.layers = nn.CellList([BaiChuanLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.layers = nn.ModuleList([BaiChuanLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = RMSNorm(config.hidden_size, eps=
+config.rms_norm_eps)
 
         self.post_init()
         self.max_cache_pos = config.model_max_length
@@ -1454,7 +1462,7 @@ num_attention_heads, hidden_size, num_hidden_layers, rms_norm_eps, and model_max
             mask = self.future_mask[:self.n_head, :seq_length_with_past, :seq_length_with_past]
         return mask
 
-    def construct(
+    def forward(
             self,
             input_ids: mindspore.Tensor = None,
             attention_mask: Optional[mindspore.Tensor] = None,
@@ -1603,7 +1611,7 @@ class BaiChuanForCausalLM(BaiChuanPreTrainedModel):
             self.model = BaiChuan7bModel(config)
             raise ValueError('BaiChuan model only support 7b and 13b, please check your config.')
 
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1684,7 +1692,7 @@ class BaiChuanForCausalLM(BaiChuanPreTrainedModel):
         """
         return self.model
 
-    def construct(
+    def forward(
             self,
             input_ids: Tensor = None,
             attention_mask: Optional[Tensor] = None,

@@ -54,15 +54,15 @@ class ClapProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
-                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+                The audio or batch of audios to be prepared. Each audio can be NumPy array or MindSpore tensor. In case
+                of a NumPy array/MindSpore tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return MindSpore `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 

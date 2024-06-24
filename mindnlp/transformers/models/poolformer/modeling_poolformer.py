@@ -18,7 +18,9 @@ import collections.abc
 from typing import Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from mindspore.common.initializer import Normal
 
@@ -67,21 +69,21 @@ def drop_path(input: ms.Tensor, drop_prob: float = 0.0, training: bool = False) 
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->PoolFormer
-class PoolFormerDropPath(nn.Cell):
+class PoolFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
+    def forward(self, hidden_states: ms.Tensor) -> ms.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
 
 
-class PoolFormerEmbeddings(nn.Cell):
+class PoolFormerEmbeddings(nn.Module):
     """
     Construct Patch Embeddings.
     """
@@ -96,10 +98,10 @@ class PoolFormerEmbeddings(nn.Cell):
             padding, collections.abc.Iterable) else padding
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size,
-                                    stride=stride, pad_mode='pad', padding=padding, has_bias=True)
+                                    stride=stride, pad_mode='pad', padding=padding, bias=True)
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
-    def construct(self, pixel_values):
+    def forward(self, pixel_values):
         embeddings = self.projection(pixel_values)
         embeddings = self.norm(embeddings)
         return embeddings
@@ -114,28 +116,28 @@ class PoolFormerGroupNorm(nn.GroupNorm):
         super().__init__(1, num_channels, **kwargs)
 
 
-class PoolFormerPooling(nn.Cell):
+class PoolFormerPooling(nn.Module):
     def __init__(self, pool_size):
         super().__init__()
         self.pool = nn.AvgPool2d(
             pool_size, stride=1, pad_mode='pad', padding=pool_size // 2, count_include_pad=False)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         return self.pool(hidden_states) - hidden_states
 
 
-class PoolFormerOutput(nn.Cell):
+class PoolFormerOutput(nn.Module):
     def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
         super().__init__()
-        self.conv1 = nn.Conv2d(hidden_size, intermediate_size, 1, has_bias=True)
-        self.conv2 = nn.Conv2d(intermediate_size, hidden_size, 1, has_bias=True)
+        self.conv1 = nn.Conv2d(hidden_size, intermediate_size, 1, bias=True)
+        self.conv2 = nn.Conv2d(intermediate_size, hidden_size, 1, bias=True)
         self.drop = PoolFormerDropPath(dropout_prob)
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
             self.act_fn = config.hidden_act
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.act_fn(hidden_states)
         hidden_states = self.drop(hidden_states)
@@ -145,7 +147,7 @@ class PoolFormerOutput(nn.Cell):
         return hidden_states
 
 
-class PoolFormerLayer(nn.Cell):
+class PoolFormerLayer(nn.Module):
     """This corresponds to the 'PoolFormerBlock' class in the original implementation."""
 
     def __init__(self, config, num_channels, pool_size, hidden_size, intermediate_size, drop_path):
@@ -168,7 +170,7 @@ class PoolFormerLayer(nn.Cell):
                 config.layer_scale_init_value * ops.ones((num_channels)), requires_grad=True
             )
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         if self.use_layer_scale:
             pooling_output = self.pooling(self.before_norm(hidden_states))
             scaled_op = self.layer_scale_1.unsqueeze(
@@ -202,7 +204,7 @@ class PoolFormerLayer(nn.Cell):
             return outputs
 
 
-class PoolFormerEncoder(nn.Cell):
+class PoolFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -222,7 +224,7 @@ class PoolFormerEncoder(nn.Cell):
                     hidden_size=config.hidden_sizes[i],
                 )
             )
-        self.patch_embeddings = nn.CellList(embeddings)
+        self.patch_embeddings = nn.ModuleList(embeddings)
 
         # Transformer blocks
         blocks = []
@@ -244,11 +246,11 @@ class PoolFormerEncoder(nn.Cell):
                         drop_path=dpr[cur + j],
                     )
                 )
-            blocks.append(nn.CellList(layers))
+            blocks.append(nn.ModuleList(layers))
 
-        self.block = nn.CellList(blocks)
+        self.block = nn.ModuleList(blocks)
 
-    def construct(self, pixel_values, output_hidden_states=False, return_dict=True):
+    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
 
         hidden_states = pixel_values
@@ -306,7 +308,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -336,12 +338,12 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         )
 
 
-class PoolFormerFinalPooler(nn.Cell):
+class PoolFormerFinalPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Dense(config.hidden_size, config.hidden_size)
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         output = self.dense(hidden_states)
         return output
 
@@ -363,7 +365,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[ms.Tensor] = None,
         labels: Optional[ms.Tensor] = None,

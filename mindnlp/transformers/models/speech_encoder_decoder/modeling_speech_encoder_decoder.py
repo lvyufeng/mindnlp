@@ -21,7 +21,9 @@ from typing import Optional, Tuple, Union
 # from torch.nn import CrossEntropyLoss
 import mindspore
 from mindspore import ops
-from mindspore import nn
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindnlp.utils import logging
 
 from ...configuration_utils import PretrainedConfig
@@ -60,8 +62,8 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Cell](https://pytorch.org/docs/stable/nn.html#torch.nn.Cell) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a MindSpore [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular MindSpore Module and refer to the MindSpore documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -309,7 +311,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
                       this case, `from_tf` should be set to `True` and a configuration object should be provided as
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      MindSpore model using the provided conversion scripts and loading the MindSpore model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -320,7 +322,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
                       this case, `from_tf` should be set to `True` and a configuration object should be provided as
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      MindSpore model using the provided conversion scripts and loading the MindSpore model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaning positional arguments will be passed to the underlying model's `__init__` method.
@@ -436,7 +438,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     # @add_start_docstrings_to_model_forward(SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    def construct(
+    def forward(
         self,
         inputs: Optional[mindspore.Tensor] = None,
         attention_mask: Optional[mindspore.Tensor] = None,

@@ -175,7 +175,7 @@ class FillMaskPipeline(Pipeline):
             self: The instance of the FillMaskPipeline class.
             inputs: The input data to be preprocessed.
             return_tensors: (Optional) Specifies the desired format of the returned tensors. Default is 'ms'. 
-                Allowed values are 'ms' (for model-specific tensors) or 'pt' (for PyTorch tensors).
+                Allowed values are 'ms' (for model-specific tensors) or 'pt' (for MindSpore tensors).
             tokenizer_kwargs: (Optional) Additional keyword arguments to be passed to the tokenizer.
         
         Returns:

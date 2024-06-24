@@ -24,7 +24,9 @@ import yaml
 from addict import Dict
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 
 
 import numpy as np
@@ -97,7 +99,7 @@ class Conv2d(nn.Conv2d):
         self.norm = norm
         self.activation = activation
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Construct method in the Conv2d class.
         
@@ -119,7 +121,7 @@ class Conv2d(nn.Conv2d):
         return x
 
 
-class BasicStem(nn.Cell):
+class BasicStem(nn.Module):
     """
     The standard ResNet stem (layers before the first residual block),
     with a conv, relu and max_pool.
@@ -143,14 +145,14 @@ class BasicStem(nn.Cell):
             kernel_size=7,
             stride=2,
             padding=3,
-            has_bias=False,
+            bias=False,
             pad_mode='pad',
             norm=bn1
         )
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, pad_mode="pad")
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a basic stem block by applying convolution, ReLU activation, and max pooling operations.
         
@@ -170,7 +172,7 @@ class BasicStem(nn.Cell):
         return x
 
 
-class BasicBlock(nn.Cell):
+class BasicBlock(nn.Module):
     """
     The basic residual block for ResNet-18 and ResNet-34 defined in :paper:`ResNet`,
     with two 3x3 conv layers and a projection shortcut if needed.
@@ -194,7 +196,7 @@ class BasicBlock(nn.Cell):
                 out_channels,
                 kernel_size=1,
                 stride=stride,
-                has_bias=False,
+                bias=False,
                 norm=nn.BatchNorm2d(out_channels),
                 pad_mode='valid'
             )
@@ -208,7 +210,7 @@ class BasicBlock(nn.Cell):
             stride=stride,
             padding=1,
             pad_mode='pad',
-            has_bias=False,
+            bias=False,
             norm=nn.BatchNorm2d(out_channels)
         )
 
@@ -219,12 +221,12 @@ class BasicBlock(nn.Cell):
             stride=1,
             padding=1,
             pad_mode='pad',
-            has_bias=False,
+            bias=False,
             norm=nn.BatchNorm2d(out_channels)
         )
         self.relu = nn.ReLU()
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a basic block by performing convolutional operations and element-wise addition with shortcut connection.
         
@@ -252,7 +254,7 @@ class BasicBlock(nn.Cell):
         return out
 
 
-class BottleneckBlock(nn.Cell):
+class BottleneckBlock(nn.Module):
     """
     The standard bottleneck residual block used by ResNet-50, 101 and 152
     defined in :paper:`ResNet`.  It contains 3 conv layers with kernels
@@ -293,7 +295,7 @@ class BottleneckBlock(nn.Cell):
                 out_channels,
                 kernel_size=1,
                 stride=stride,
-                has_bias=False,
+                bias=False,
                 norm=norm(out_channels),
                 pad_mode='valid'
             )
@@ -309,7 +311,7 @@ class BottleneckBlock(nn.Cell):
             bottleneck_channels,
             kernel_size=1,
             stride=stride_1x1,
-            has_bias=False,
+            bias=False,
             norm=nn.BatchNorm2d(bottleneck_channels),
             pad_mode='valid'
         )
@@ -320,7 +322,7 @@ class BottleneckBlock(nn.Cell):
             kernel_size=3,
             stride=stride_3x3,
             padding=1 * dilation,
-            has_bias=False,
+            bias=False,
             group=num_groups,
             dilation=dilation,
             pad_mode='pad',
@@ -330,13 +332,13 @@ class BottleneckBlock(nn.Cell):
             bottleneck_channels,
             out_channels,
             kernel_size=1,
-            has_bias=False,
+            bias=False,
             pad_mode='valid',
             norm=norm(out_channels)
         )
         self.relu = nn.ReLU()
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs a bottleneck block for the BottleneckBlock class.
         
@@ -367,7 +369,7 @@ class BottleneckBlock(nn.Cell):
         return out
 
 
-class ResNet(nn.Cell):
+class ResNet(nn.Module):
     """
     Implement :paper:`ResNet`.
     """
@@ -405,7 +407,7 @@ class ResNet(nn.Cell):
         for i, blocks in enumerate(stages):
             assert len(blocks) > 0, len(blocks)
             for block in blocks:
-                assert isinstance(block, nn.Cell), block
+                assert isinstance(block, nn.Module), block
 
             name = "res" + str(i + 2)
             stage = nn.SequentialCell(*blocks)
@@ -434,7 +436,7 @@ class ResNet(nn.Cell):
         self._out_features = out_features
         assert len(self._out_features)
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Args:
             x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
@@ -721,11 +723,11 @@ specified in the configuration. The constructed FPN backbone is returned as the 
     return backbone
 
 
-class LastLevelMaxPool(nn.Cell):
+class LastLevelMaxPool(nn.Module):
 
     """
     The LastLevelMaxPool class represents a neural network cell that performs max pooling on input data. 
-    This class inherits from nn.Cell and implements the functionality to construct the max pooling operation on input data.
+    This class inherits from nn.Module and implements the functionality to construct the max pooling operation on input data.
     
     Attributes:
         num_levels (int): The number of levels in the max pooling operation. Default value is 1.
@@ -757,7 +759,7 @@ class LastLevelMaxPool(nn.Cell):
         self.num_levels = 1
         self.in_feature = "p5"
 
-    def construct(self, x):
+    def forward(self, x):
         """
             Constructs the last level max pooling operation on the input tensor.
         
@@ -774,15 +776,15 @@ class LastLevelMaxPool(nn.Cell):
         return [ops.max_pool2d(x, kernel_size=1, stride=2, padding=0)]
 
 
-class FPN(nn.Cell):
+class FPN(nn.Module):
 
     """
     This class represents a Feature Pyramid Network (FPN) implemented as a neural network module in MindSpore. FPN is a commonly used architecture in computer vision tasks, especially in object detection.
     
-    The FPN class inherits from the nn.Cell class, which is the base class for all neural network modules in MindSpore.
+    The FPN class inherits from the nn.Module class, which is the base class for all neural network modules in MindSpore.
     
     Attributes:
-        bottom_up (nn.Cell): The bottom-up network that extracts features from the input data.
+        bottom_up (nn.Module): The bottom-up network that extracts features from the input data.
         in_features (tuple): The names of the input features used by the FPN.
         out_features (list): The names of the output features produced by the FPN.
         out_feature_channels (dict): A dictionary mapping the names of the output features to their corresponding channel dimensions.
@@ -854,8 +856,8 @@ class FPN(nn.Cell):
         output_convs = []
 
         for idx, in_channels in enumerate(in_channels_per_feature):
-            lateral_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, has_bias=True, pad_mode='valid')
-            output_conv = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, has_bias=True, pad_mode='pad')
+            lateral_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=True, pad_mode='valid')
+            output_conv = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=True, pad_mode='pad')
             stage = int(math.log2(strides[idx]))
 
             setattr(self, "fpn_lateral{}".format(stage), lateral_conv)
@@ -934,7 +936,7 @@ class FPN(nn.Cell):
             for name in self._out_features
         }
 
-    def construct(self, x):
+    def forward(self, x):
         """
         Constructs the Feature Pyramid Network (FPN) based on the provided input.
         

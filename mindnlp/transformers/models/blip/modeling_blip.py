@@ -19,7 +19,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import mindspore
-from mindspore import nn, ops, Parameter
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal, TruncatedNormal
 
 from ...activations import ACT2FN
@@ -273,10 +275,10 @@ class BlipOutput(ModelOutput):
         )
 
 
-class BlipVisionEmbeddings(nn.Cell):
+class BlipVisionEmbeddings(nn.Module):
 
     """
-    The BlipVisionEmbeddings class represents the embeddings for vision data in the Blip framework. This class inherits from nn.Cell and provides methods for initializing and constructing vision embeddings.
+    The BlipVisionEmbeddings class represents the embeddings for vision data in the Blip framework. This class inherits from nn.Module and provides methods for initializing and constructing vision embeddings.
     
     Attributes:
         config (BlipVisionConfig): The configuration object for the BlipVisionEmbeddings.
@@ -322,7 +324,7 @@ class BlipVisionEmbeddings(nn.Cell):
         self.class_embedding = Parameter(ops.randn(1, 1, self.embed_dim))
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, has_bias=True
+            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=True
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -330,7 +332,7 @@ class BlipVisionEmbeddings(nn.Cell):
 
         self.position_embedding = Parameter(ops.randn(1, self.num_positions, self.embed_dim))
 
-    def construct(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, pixel_values: mindspore.Tensor) -> mindspore.Tensor:
         '''
         Constructs the embeddings for the BlipVisionEmbeddings class.
         
@@ -365,11 +367,11 @@ embedding_dim is the dimension of the embeddings.
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Blip
-class BlipTextEmbeddings(nn.Cell):
+class BlipTextEmbeddings(nn.Module):
 
     """
     This class represents a text embeddings module for BlipText, providing functionality to construct embeddings for input tokens with position information.
-    The BlipTextEmbeddings class inherits from nn.Cell and implements methods to initialize embeddings based on configuration settings and construct embeddings for input tokens with optional position
+    The BlipTextEmbeddings class inherits from nn.Module and implements methods to initialize embeddings based on configuration settings and construct embeddings for input tokens with optional position
 information.
     """
     def __init__(self, config: BlipTextConfig):
@@ -398,7 +400,7 @@ information.
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_ids = ops.arange(config.max_position_embeddings).expand((1, -1))
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         position_ids: Optional[mindspore.Tensor] = None,
@@ -434,7 +436,7 @@ information.
         return embeddings
 
 
-class BlipAttention(nn.Cell):
+class BlipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
     def __init__(self, config):
         """
@@ -488,7 +490,7 @@ class BlipAttention(nn.Cell):
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         head_mask: Optional[mindspore.Tensor] = None,
@@ -533,11 +535,11 @@ class BlipAttention(nn.Cell):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Blip
-class BlipMLP(nn.Cell):
+class BlipMLP(nn.Module):
 
     """
     The BlipMLP class represents a multi-layer perceptron (MLP) model for neural network computations. 
-    This class inherits from the nn.Cell module and provides functionality for constructing and applying a multi-layer perceptron with configurable activation functions and layer sizes. 
+    This class inherits from the nn.Module module and provides functionality for constructing and applying a multi-layer perceptron with configurable activation functions and layer sizes. 
     
     Attributes:
         config (object): The configuration object containing parameters for the MLP model.
@@ -573,7 +575,7 @@ class BlipMLP(nn.Cell):
         self.fc1 = nn.Dense(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Dense(config.intermediate_size, config.hidden_size)
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs a multi-layer perceptron (MLP) using the given hidden states.
         
@@ -601,7 +603,7 @@ MLP.
         return hidden_states
 
 
-class BlipEncoderLayer(nn.Cell):
+class BlipEncoderLayer(nn.Module):
 
     """
     This class represents a single layer of the Blip encoder. It consists of self-attention mechanism followed by a feedforward neural network layer with layer normalization and residual connections.
@@ -648,11 +650,11 @@ class BlipEncoderLayer(nn.Cell):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = BlipAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = BlipMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, epsilon=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: mindspore.Tensor,
@@ -723,7 +725,7 @@ class BlipPreTrainedModel(PreTrainedModel):
             cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
 
 
-class BlipEncoder(nn.Cell):
+class BlipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`BlipEncoderLayer`].
@@ -749,10 +751,10 @@ class BlipEncoder(nn.Cell):
         """
         super().__init__()
         self.config = config
-        self.layers = nn.CellList([BlipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([BlipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def construct(
+    def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -864,11 +866,11 @@ Union[Tuple, BaseModelOutputWithPooling]: Constructs the BlipVisionModel and ret
 
         self.embeddings = BlipVisionEmbeddings(config)
         self.encoder = BlipEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, epsilon=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.post_init()
 
-    def construct(
+    def forward(
         self,
         pixel_values: Optional[mindspore.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1017,8 +1019,8 @@ BlipOutput]
         self.text_model = BlipTextModel(text_config)
         self.vision_model = BlipVisionModel(vision_config)
 
-        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, has_bias=False)
-        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, has_bias=False)
+        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = Parameter(mindspore.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
@@ -1097,7 +1099,7 @@ BlipOutput]
 
         return image_features
 
-    def construct(
+    def forward(
         self,
         input_ids: Optional[mindspore.Tensor] = None,
         pixel_values: Optional[mindspore.Tensor] = None,
@@ -1204,7 +1206,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     
     Methods:
         __init__(self, config: BlipConfig): Initializes the BlipForConditionalGeneration model.
-        get_input_embeddings(self) -> nn.Cell: Returns the input embeddings of the vision model.
+        get_input_embeddings(self) -> nn.Module: Returns the input embeddings of the vision model.
         construct(self, pixel_values: mindspore.Tensor, input_ids: Optional[mindspore.Tensor] = None, attention_mask: Optional[mindspore.Tensor] = None, output_attentions: Optional[bool] = None,
 output_hidden_states: Optional[bool] = None, labels: Optional[mindspore.Tensor] = None, return_dict: Optional[bool] = None) -> Union[Tuple, BlipForConditionalGenerationModelOutput]: Constructs the model
 architecture and generates image captions.
@@ -1267,7 +1269,7 @@ generate function to enable the model to be used as a conditional generator.
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         This method returns the input embeddings for the BlipForConditionalGeneration class.
         
@@ -1275,7 +1277,7 @@ generate function to enable the model to be used as a conditional generator.
             self (BlipForConditionalGeneration): The instance of the BlipForConditionalGeneration class.
         
         Returns:
-            nn.Cell: The input embeddings for the BlipForConditionalGeneration class. This is an instance of the nn.Cell class.
+            nn.Module: The input embeddings for the BlipForConditionalGeneration class. This is an instance of the nn.Module class.
         
         Raises:
             None.
@@ -1283,7 +1285,7 @@ generate function to enable the model to be used as a conditional generator.
         """
         return self.vision_model.embeddings.patch_embedding
 
-    def construct(
+    def forward(
         self,
         pixel_values: mindspore.Tensor,
         input_ids: Optional[mindspore.Tensor] = None,
@@ -1437,7 +1439,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
     1. __init__(self, config: BlipConfig)
         Initializes the BlipForQuestionAnswering instance with the given configuration.
     
-    2. get_input_embeddings(self) -> nn.Cell
+    2. get_input_embeddings(self) -> nn.Module
         Returns the input embeddings of the vision model.
     
     3. construct(self, input_ids: mindspore.Tensor, pixel_values: mindspore.Tensor, decoder_input_ids: Optional[mindspore.Tensor] = None, decoder_attention_mask: Optional[mindspore.Tensor] = None,
@@ -1483,7 +1485,7 @@ attention_mask: Optional[mindspore.Tensor] = None, output_attentions: Optional[b
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         This method returns the input embeddings from the vision model for question answering.
         
@@ -1491,14 +1493,14 @@ attention_mask: Optional[mindspore.Tensor] = None, output_attentions: Optional[b
             self (BlipForQuestionAnswering): The instance of the BlipForQuestionAnswering class.
             
         Returns:
-            nn.Cell: The input embeddings from the vision model, which is of type nn.Cell.
+            nn.Module: The input embeddings from the vision model, which is of type nn.Module.
             
         Raises:
             None
         """
         return self.vision_model.embeddings.patch_embedding
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor,
         pixel_values: mindspore.Tensor,
@@ -1749,7 +1751,7 @@ input text. Depending on the 'use_itm_head' parameter, the method either compute
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Cell:
+    def get_input_embeddings(self) -> nn.Module:
         """
         Method to get the input embeddings from the vision model for image-text retrieval.
         
@@ -1758,7 +1760,7 @@ input text. Depending on the 'use_itm_head' parameter, the method either compute
                 This parameter is required to access the vision model and its embeddings.
             
         Returns:
-            nn.Cell: A neural network cell representing the input embeddings obtained from the vision model.
+            nn.Module: A neural network cell representing the input embeddings obtained from the vision model.
                 These embeddings are used for matching image features with text features in the retrieval process.
         
         Raises:
@@ -1766,7 +1768,7 @@ input text. Depending on the 'use_itm_head' parameter, the method either compute
         """
         return self.vision_model.embeddings.patch_embedding
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor,
         pixel_values: mindspore.Tensor,

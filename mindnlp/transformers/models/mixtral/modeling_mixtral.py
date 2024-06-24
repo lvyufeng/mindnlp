@@ -24,7 +24,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Parameter, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
+
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -148,12 +151,12 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
-class MixtralRMSNorm(nn.Cell):
+class MixtralRMSNorm(nn.Module):
 
     """
     The MixtralRMSNorm class is a custom implementation of the T5LayerNorm, which is used for normalization in neural networks. 
     
-    This class inherits from the nn.Cell class and provides methods to perform RMS normalization on hidden states. 
+    This class inherits from the nn.Module class and provides methods to perform RMS normalization on hidden states. 
     
     Attributes:
         - weight (Parameter): A learnable parameter that scales the normalized hidden states.
@@ -175,7 +178,7 @@ class MixtralRMSNorm(nn.Cell):
         self.weight = Parameter(ops.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         This method 'construct' is defined within the 'MixtralRMSNorm' class and is used to perform a specific computation on the input hidden states.
         
@@ -199,12 +202,12 @@ class MixtralRMSNorm(nn.Cell):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
-class MixtralRotaryEmbedding(nn.Cell):
+class MixtralRotaryEmbedding(nn.Module):
 
     """
     A class representing MixtralRotaryEmbedding, a neural network module used for Rotary Positional Embedding in Mixtral models.
     
-    This class inherits from nn.Cell and provides methods to initialize the embedding, set the cosine and sine cache, 
+    This class inherits from nn.Module and provides methods to initialize the embedding, set the cosine and sine cache, 
     and construct the embedding for a given input sequence.
     
     Attributes:
@@ -284,7 +287,7 @@ class MixtralRotaryEmbedding(nn.Cell):
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         This method constructs a Mixtral Rotary Embedding based on the input parameters.
         
@@ -361,7 +364,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
-class MixtralAttention(nn.Cell):
+class MixtralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -407,10 +410,10 @@ during the forward call if caching is used.
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=False)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=False)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=False)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = MixtralRotaryEmbedding(
             self.head_dim,
@@ -439,7 +442,7 @@ returned tensor has its dimensions rearranged to facilitate further processing i
         """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -537,10 +540,10 @@ MIXTRAL_ATTENTION_CLASSES = {
 }
 
 
-class MixtralBlockSparseTop2MLP(nn.Cell):
+class MixtralBlockSparseTop2MLP(nn.Module):
 
     """
-    The MixtralBlockSparseTop2MLP class represents a neural network block that utilizes sparse top-2 multi-layer perceptron (MLP) for processing hidden states. It inherits from nn.Cell and includes methods for
+    The MixtralBlockSparseTop2MLP class represents a neural network block that utilizes sparse top-2 multi-layer perceptron (MLP) for processing hidden states. It inherits from nn.Module and includes methods for
 initialization and construction of the MLP layers.
     
     Attributes:
@@ -575,13 +578,13 @@ initialization and construction of the MLP layers.
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
 
-        self.w1 = nn.Dense(self.hidden_dim, self.ffn_dim, has_bias=False)
-        self.w2 = nn.Dense(self.ffn_dim, self.hidden_dim, has_bias=False)
-        self.w3 = nn.Dense(self.hidden_dim, self.ffn_dim, has_bias=False)
+        self.w1 = nn.Dense(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Dense(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Dense(self.hidden_dim, self.ffn_dim, bias=False)
 
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def construct(self, hidden_states):
+    def forward(self, hidden_states):
         """
         Constructs the current hidden states using the provided hidden states.
         
@@ -601,7 +604,7 @@ initialization and construction of the MLP layers.
         return current_hidden_states
 
 
-class MixtralSparseMoeBlock(nn.Cell):
+class MixtralSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -639,11 +642,11 @@ class MixtralSparseMoeBlock(nn.Cell):
         self.top_k = config.num_experts_per_tok
 
         # gating
-        self.gate = nn.Dense(self.hidden_dim, self.num_experts, has_bias=False)
+        self.gate = nn.Dense(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.CellList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
-    def construct(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
+    def forward(self, hidden_states: mindspore.Tensor) -> mindspore.Tensor:
         """
         Constructs the MixtralSparseMoeBlock.
         
@@ -716,13 +719,13 @@ class MixtralSparseMoeBlock(nn.Cell):
         return final_hidden_states, router_logits
 
 
-class MixtralDecoderLayer(nn.Cell):
+class MixtralDecoderLayer(nn.Module):
 
     """
     This class represents a decoder layer for the Mixtral model, used for processing input sequences in neural network models. 
     It includes functionality for self-attention, block sparse mixture of experts, layer normalization, and other operations specific to the Mixtral architecture.
     
-    The MixtralDecoderLayer class inherits from nn.Cell and contains methods for initialization and processing input data through the decoder layer. 
+    The MixtralDecoderLayer class inherits from nn.Module and contains methods for initialization and processing input data through the decoder layer. 
     The __init__ method initializes the layer with configuration settings and creates necessary components such as self-attention mechanism, block sparse mixture of experts, and layer normalization.
     
     The construct method processes the input hidden states along with optional arguments like attention mask, position ids, past key values, and various output flags. 
@@ -755,7 +758,7 @@ class MixtralDecoderLayer(nn.Cell):
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -843,7 +846,7 @@ attribute of the `config` object. If the `cell` has a `padding_idx`, the weight 
             # cf https://github.com/pytorch/pytorch/pull/5617
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -880,7 +883,7 @@ class MixtralModel(MixtralPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -920,7 +923,7 @@ class MixtralModel(MixtralPreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1116,7 +1119,7 @@ reordering cache values.
         super().__init__(config)
         self.model = MixtralModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
@@ -1221,7 +1224,7 @@ downstream tasks such as fine-tuning or further analysis.
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1501,7 +1504,7 @@ that includes the loss, logits, past_key_values, hidden_states, and attentions.
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MixtralModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1540,7 +1543,7 @@ that includes the loss, logits, past_key_values, hidden_states, and attentions.
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

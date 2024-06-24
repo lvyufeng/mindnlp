@@ -25,7 +25,9 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import mindspore
-from mindspore import nn, ops, Tensor
+from mindspore import ops
+from mindnlp.core import nn, Tensor
+from mindnlp.core.nn import Parameter
 from mindspore.common.initializer import initializer, Normal
 
 from mindnlp.utils import logging, get_default_dtype
@@ -70,10 +72,10 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Starcoder2
-class Starcoder2RotaryEmbedding(nn.Cell):
+class Starcoder2RotaryEmbedding(nn.Module):
 
     """
-    The Starcoder2RotaryEmbedding class represents a rotary embedding module used for positional encoding in neural network models. This class inherits from the nn.Cell class.
+    The Starcoder2RotaryEmbedding class represents a rotary embedding module used for positional encoding in neural network models. This class inherits from the nn.Module class.
     
     The class's constructor method initializes the Starcoder2RotaryEmbedding instance with the specified dimensions, maximum position embeddings, and base value for the rotary embedding. It computes the
 inverse frequency and sets the cosine and sine cache for positional encoding.
@@ -139,7 +141,7 @@ inverse frequency and sets the cosine and sine cache for positional encoding.
         self.cos_cached = emb.cos().to(dtype)
         self.sin_cached = emb.sin().to(dtype)
 
-    def construct(self, x, seq_len=None):
+    def forward(self, x, seq_len=None):
         """
         Construct and return the cosine and sine embeddings for the given sequence length.
         
@@ -206,12 +208,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class Starcoder2MLP(nn.Cell):
+class Starcoder2MLP(nn.Module):
 
     ''' 
     A class representing a multi-layer perceptron (MLP) for Starcoder2 model.
     
-    This class inherits from nn.Cell and implements the construction of the MLP for the Starcoder2 model. 
+    This class inherits from nn.Module and implements the construction of the MLP for the Starcoder2 model. 
     The MLP consists of fully connected layers with activation functions and residual dropout.
     
     Attributes:
@@ -242,12 +244,12 @@ class Starcoder2MLP(nn.Cell):
         """
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Dense(embed_dim, config.intermediate_size, has_bias=config.use_bias)
-        self.c_proj = nn.Dense(config.intermediate_size, embed_dim, has_bias=config.use_bias)
+        self.c_fc = nn.Dense(embed_dim, config.intermediate_size, bias=config.use_bias)
+        self.c_proj = nn.Dense(config.intermediate_size, embed_dim, bias=config.use_bias)
         self.act = ACT2FN[config.hidden_act]
         self.residual_dropout = config.residual_dropout
 
-    def construct(self, hidden_states: Optional[Tuple[mindspore.Tensor]]) -> mindspore.Tensor:
+    def forward(self, hidden_states: Optional[Tuple[mindspore.Tensor]]) -> mindspore.Tensor:
         """
         This method constructs the forward pass of the Starcoder2MLP model.
         
@@ -282,7 +284,7 @@ def repeat_kv(hidden_states: mindspore.Tensor, n_rep: int) -> mindspore.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Starcoder2Attention(nn.Cell):
+class Starcoder2Attention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -331,10 +333,10 @@ caching is used.
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=self.use_bias)
-        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=self.use_bias)
-        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=self.use_bias)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=self.use_bias)
+        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, bias=self.use_bias)
+        self.k_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.use_bias)
+        self.v_proj = nn.Dense(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.use_bias)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, bias=self.use_bias)
 
         self.rotary_emb = Starcoder2RotaryEmbedding(
             self.head_dim,
@@ -342,7 +344,7 @@ caching is used.
             base=self.rope_theta,
         )
 
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -451,10 +453,10 @@ STARCODER2_ATTENTION_CLASSES = {
 }
 
 
-class Starcoder2DecoderLayer(nn.Cell):
+class Starcoder2DecoderLayer(nn.Module):
 
     """
-    The Starcoder2DecoderLayer class represents a single layer of the Starcoder2 decoder model. This class inherits from nn.Cell and implements the operations required for the decoder layer.
+    The Starcoder2DecoderLayer class represents a single layer of the Starcoder2 decoder model. This class inherits from nn.Module and implements the operations required for the decoder layer.
     
     Attributes:
         hidden_size (int): The size of the hidden state in the layer.
@@ -505,11 +507,13 @@ class Starcoder2DecoderLayer(nn.Cell):
 
         self.mlp = Starcoder2MLP(config)
 
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.norm_epsilon)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, epsilon=config.norm_epsilon)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=
+config.norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=
+config.norm_epsilon)
 
     # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
-    def construct(
+    def forward(
         self,
         hidden_states: mindspore.Tensor,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -594,7 +598,7 @@ configuration. If the cell has a padding index, the weight corresponding to the 
         if isinstance(cell, nn.Dense):
             cell.weight.set_data(initializer(Normal(self.config.initializer_range),
                                                     cell.weight.shape, cell.weight.dtype))
-            if cell.has_bias:
+            if cell.bias is not None:
                 cell.bias.set_data(initializer('zeros', cell.bias.shape, cell.bias.dtype))
         elif isinstance(cell, nn.Embedding):
             weight = np.random.normal(0.0, self.config.initializer_range, cell.weight.shape)
@@ -639,11 +643,12 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embedding_dropout = config.embedding_dropout
-        self.layers = nn.CellList(
+        self.layers = nn.ModuleList(
             [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         # self._attn_implementation = config._attn_implementation
-        self.norm = nn.LayerNorm(config.hidden_size, epsilon=config.norm_epsilon)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=
+config.norm_epsilon)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -679,7 +684,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         """
         self.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -868,7 +873,7 @@ inputs for generation, and reorder the cache.
         super().__init__(config)
         self.model = Starcoder2Model(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -974,7 +979,7 @@ inputs for generation, and reorder the cache.
         """
         return self.model
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,
@@ -1192,7 +1197,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Starcoder2Model(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = nn.Dense(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1230,7 +1235,7 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
         """
         self.model.embed_tokens = value
 
-    def construct(
+    def forward(
         self,
         input_ids: mindspore.Tensor = None,
         attention_mask: Optional[mindspore.Tensor] = None,

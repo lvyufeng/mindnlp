@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Swin model."""
+"""Testing suite for the MindSpore Swin model."""
 
 import collections
 import unittest
@@ -255,8 +255,8 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    # TODO: check if this works again for MindSpore 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with MindSpore 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 

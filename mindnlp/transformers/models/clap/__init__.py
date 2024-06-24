@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch clap model."""
+"""MindSpore clap model."""
 from . import configuration_clap, processing_clap, modeling_clap, feature_extraction_clap
 from .modeling_clap import (
             ClapModel,
