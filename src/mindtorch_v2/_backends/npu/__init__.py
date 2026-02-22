@@ -129,3 +129,52 @@ registry.register("getitem", "npu", getitem)
 registry.register("setitem", "npu", setitem)
 
 __all__ = ["is_available", "_probe_model_dirs", "_model_dir", "allocator"]
+from .ops import (
+    allclose,
+    isclose,
+    equal,
+    asinh,
+    acosh,
+    atanh,
+    atan,
+    atan2,
+    asin,
+    acos,
+    min_,
+    max_,
+    fmin,
+    fmax,
+    where,
+    lerp,
+    addcmul,
+    addcdiv,
+    logaddexp,
+    logaddexp2,
+    hypot,
+    remainder,
+    fmod,
+)
+
+registry.register("allclose", "npu", allclose, meta=meta_infer.infer_reduce_bool)
+registry.register("isclose", "npu", isclose, meta=meta_infer.infer_binary)
+registry.register("equal", "npu", equal, meta=meta_infer.infer_reduce_bool)
+registry.register("asinh", "npu", asinh, meta=meta_infer.infer_unary)
+registry.register("acosh", "npu", acosh, meta=meta_infer.infer_unary)
+registry.register("atanh", "npu", atanh, meta=meta_infer.infer_unary)
+registry.register("atan", "npu", atan, meta=meta_infer.infer_unary)
+registry.register("atan2", "npu", atan2, meta=meta_infer.infer_binary)
+registry.register("asin", "npu", asin, meta=meta_infer.infer_unary)
+registry.register("acos", "npu", acos, meta=meta_infer.infer_unary)
+registry.register("min", "npu", min_, meta=meta_infer.infer_binary)
+registry.register("max", "npu", max_, meta=meta_infer.infer_binary)
+registry.register("fmin", "npu", fmin, meta=meta_infer.infer_binary)
+registry.register("fmax", "npu", fmax, meta=meta_infer.infer_binary)
+registry.register("where", "npu", where, meta=meta_infer.infer_binary)
+registry.register("lerp", "npu", lerp, meta=meta_infer.infer_binary)
+registry.register("addcmul", "npu", addcmul, meta=meta_infer.infer_binary)
+registry.register("addcdiv", "npu", addcdiv, meta=meta_infer.infer_binary)
+registry.register("logaddexp", "npu", logaddexp, meta=meta_infer.infer_binary)
+registry.register("logaddexp2", "npu", logaddexp2, meta=meta_infer.infer_binary)
+registry.register("hypot", "npu", hypot, meta=meta_infer.infer_binary)
+registry.register("remainder", "npu", remainder, meta=meta_infer.infer_binary)
+registry.register("fmod", "npu", fmod, meta=meta_infer.infer_binary)

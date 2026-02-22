@@ -95,6 +95,8 @@ class _HookHandle:
 
 
 class Tensor:
+    __hash__ = object.__hash__
+
     def __init__(self, storage, shape, stride, offset=0, requires_grad=False):
         self._storage = storage
         self.shape = tuple(shape)

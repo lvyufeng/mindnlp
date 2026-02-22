@@ -1,8 +1,11 @@
+import numpy as np
+
 from ..._dtype import bool as bool_dtype
 from ..._dtype import int32 as int32_dtype
 from ..._dtype import int64 as int64_dtype
 from ..._dtype import float32 as float_dtype
-from ..._storage import npu_typed_storage_from_ptr
+from ..._storage import npu_typed_storage_from_ptr, typed_storage_from_numpy
+from ..._tensor import Tensor
 from . import aclnn
 from . import runtime as npu_runtime
 from . import state as npu_state
@@ -19,6 +22,12 @@ def _wrap_tensor(storage, shape, stride):
     from ..._tensor import Tensor
 
     return Tensor(storage, shape, stride)
+
+
+def _from_numpy(arr, dtype, device):
+    storage = typed_storage_from_numpy(arr, dtype, device=device)
+    stride = tuple(np.array(arr.strides) // arr.itemsize)
+    return Tensor(storage, arr.shape, stride)
 
 
 def _dtype_itemsize(dtype):
@@ -1361,10 +1370,41 @@ def add_(a, b):
 
 def _scalar_to_npu_tensor(scalar, ref_tensor):
     """Convert scalar to NPU tensor matching ref_tensor's shape/dtype/device."""
-    import mindtorch_v2 as torch
-    import numpy as np
-    arr = np.full(ref_tensor.shape, scalar, dtype=np.float32)
-    return torch.tensor(arr, dtype=ref_tensor.dtype).to(ref_tensor.device)
+    runtime = npu_runtime.get_runtime((ref_tensor.device.index or 0))
+    stream = npu_state.current_stream((ref_tensor.device.index or 0))
+    if ref_tensor.device.type != "npu":
+        raise ValueError("NPU scalar tensor expects NPU device")
+    shape = ref_tensor.shape
+    stride = npu_runtime._contiguous_stride(shape)
+    out_size = _numel(shape) * _dtype_itemsize(ref_tensor.dtype)
+    out_ptr = npu_runtime._alloc_device(out_size, runtime=runtime)
+    aclnn.inplace_zero(out_ptr, shape, stride, ref_tensor.dtype, runtime, stream=stream.stream)
+    if scalar != 0:
+        tmp_ptr = npu_runtime._alloc_device(out_size, runtime=runtime)
+        aclnn.inplace_one(tmp_ptr, shape, stride, ref_tensor.dtype, runtime, stream=stream.stream)
+        aclnn.adds(
+            tmp_ptr,
+            float(scalar - 1.0),
+            tmp_ptr,
+            shape,
+            stride,
+            ref_tensor.dtype,
+            runtime,
+            stream=stream.stream,
+        )
+        aclnn.add(
+            tmp_ptr,
+            out_ptr,
+            out_ptr,
+            shape,
+            stride,
+            ref_tensor.dtype,
+            runtime,
+            stream=stream.stream,
+        )
+        runtime.defer_free(tmp_ptr)
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(shape), ref_tensor.dtype, device=ref_tensor.device)
+    return _wrap_tensor(out_storage, shape, stride)
 
 
 def mul_(a, b):
@@ -1570,3 +1610,344 @@ def setitem(tensor, key, value):
         return tensor
 
     raise NotImplementedError(f"NPU setitem not implemented for key type: {type(key)}")
+
+
+def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU allclose expects NPU tensors")
+    out = isclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)
+    if out.numel() == 0:
+        return True
+    return all_(out).item()
+
+
+def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU isclose expects NPU tensors")
+    if not aclnn.isclose_symbols_ok():
+        raise RuntimeError("aclnnIsClose not available")
+    out_shape = _broadcast_shape(a.shape, b.shape)
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(bool_dtype), runtime=runtime)
+    aclnn.isclose(
+        _unwrap_storage(a).data_ptr(),
+        _unwrap_storage(b).data_ptr(),
+        out_ptr,
+        a.shape,
+        a.stride,
+        b.shape,
+        b.stride,
+        out_shape,
+        out_stride,
+        a.dtype,
+        rtol,
+        atol,
+        equal_nan,
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), bool_dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def equal(a, b):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU equal expects NPU tensors")
+    if a.shape != b.shape:
+        return False
+    a_cpu = a.to("cpu")
+    b_cpu = b.to("cpu")
+    return bool(np.array_equal(a_cpu.numpy(), b_cpu.numpy()))
+
+
+def asinh(a):
+    return _unary_op(a, aclnn.asinh, "asinh")
+
+
+def acosh(a):
+    return _unary_op(a, aclnn.acosh, "acosh")
+
+
+def atanh(a):
+    return _unary_op(a, aclnn.atanh, "atanh")
+
+
+def atan(a):
+    return _unary_op(a, aclnn.atan, "atan")
+
+
+def asin(a):
+    return _unary_op(a, aclnn.asin, "asin")
+
+
+def acos(a):
+    return _unary_op(a, aclnn.acos, "acos")
+
+
+def atan2(a, b):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU atan2 expects NPU tensors")
+    if a.dtype != b.dtype:
+        raise ValueError("NPU atan2 requires matching dtypes")
+    out_shape = _broadcast_shape(a.shape, b.shape)
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.atan2(
+        _unwrap_storage(a).data_ptr(),
+        _unwrap_storage(b).data_ptr(),
+        out_ptr,
+        a.shape,
+        a.stride,
+        b.shape,
+        b.stride,
+        out_shape,
+        out_stride,
+        a.dtype,
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def min_(a, b):
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU min expects NPU tensors")
+    if a.dtype != b.dtype:
+        raise ValueError("NPU min requires matching dtypes")
+    if a.dtype.is_floating_point:
+        if a.dtype == float_dtype or isnan(a).any().item() or isnan(b).any().item():
+            out_cpu = np.minimum(a.to("cpu").numpy(), b.to("cpu").numpy())
+            out_cpu_tensor = _from_numpy(out_cpu, a.dtype, device=a.to("cpu").device)
+            return convert_backend.to_device(out_cpu_tensor, a.device)
+    return _binary_op(a, b, aclnn.minimum, "min")
+
+
+def max_(a, b):
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU max expects NPU tensors")
+    if a.dtype != b.dtype:
+        raise ValueError("NPU max requires matching dtypes")
+    if a.dtype.is_floating_point:
+        if a.dtype == float_dtype or isnan(a).any().item() or isnan(b).any().item():
+            out_cpu = np.maximum(a.to("cpu").numpy(), b.to("cpu").numpy())
+            out_cpu_tensor = _from_numpy(out_cpu, a.dtype, device=a.to("cpu").device)
+            return convert_backend.to_device(out_cpu_tensor, a.device)
+    return _binary_op(a, b, aclnn.maximum, "max")
+
+
+def fmin(a, b):
+    return _binary_op(a, b, aclnn.minimum, "fmin")
+
+
+def fmax(a, b):
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU fmax expects NPU tensors")
+    if a.dtype != b.dtype:
+        raise ValueError("NPU fmax requires matching dtypes")
+    out_cpu = np.fmax(a.to("cpu").numpy(), b.to("cpu").numpy())
+    out_cpu_tensor = _from_numpy(out_cpu, a.dtype, device=a.to("cpu").device)
+    return convert_backend.to_device(out_cpu_tensor, a.device)
+
+
+def where(cond, x, y):
+    if x.device.type != "npu" or y.device.type != "npu":
+        raise ValueError("NPU where expects NPU tensors")
+    cond_cpu = cond.to("cpu").numpy()
+    out_cpu = np.where(cond_cpu, x.to("cpu").numpy(), y.to("cpu").numpy())
+    out_cpu_tensor = _from_numpy(out_cpu, x.dtype, device=x.to("cpu").device)
+    return convert_backend.to_device(out_cpu_tensor, x.device)
+
+
+def lerp(a, b, weight):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu":
+        raise ValueError("NPU lerp expects NPU tensors")
+    if hasattr(weight, "shape"):
+        weight_tensor = weight
+    else:
+        weight_tensor = _scalar_to_npu_tensor(weight, a)
+    out_shape = _broadcast_shape(_broadcast_shape(a.shape, b.shape), weight_tensor.shape)
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.lerp(
+        _unwrap_storage(a).data_ptr(),
+        _unwrap_storage(b).data_ptr(),
+        _unwrap_storage(weight_tensor).data_ptr(),
+        out_ptr,
+        a.shape,
+        a.stride,
+        b.shape,
+        b.stride,
+        weight_tensor.shape,
+        weight_tensor.stride,
+        out_shape,
+        out_stride,
+        a.dtype,
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def addcmul(a, b, c, value=1.0):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu" or c.device.type != "npu":
+        raise ValueError("NPU addcmul expects NPU tensors")
+    out_shape = _broadcast_shape(_broadcast_shape(a.shape, b.shape), c.shape)
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.addcmul(
+        _unwrap_storage(a).data_ptr(),
+        _unwrap_storage(b).data_ptr(),
+        _unwrap_storage(c).data_ptr(),
+        out_ptr,
+        a.shape,
+        a.stride,
+        b.shape,
+        b.stride,
+        c.shape,
+        c.stride,
+        out_shape,
+        out_stride,
+        a.dtype,
+        float(value),
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def addcdiv(a, b, c, value=1.0):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu" or b.device.type != "npu" or c.device.type != "npu":
+        raise ValueError("NPU addcdiv expects NPU tensors")
+    out_shape = _broadcast_shape(_broadcast_shape(a.shape, b.shape), c.shape)
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.addcdiv(
+        _unwrap_storage(a).data_ptr(),
+        _unwrap_storage(b).data_ptr(),
+        _unwrap_storage(c).data_ptr(),
+        out_ptr,
+        a.shape,
+        a.stride,
+        b.shape,
+        b.stride,
+        c.shape,
+        c.stride,
+        out_shape,
+        out_stride,
+        a.dtype,
+        float(value),
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def logaddexp(a, b):
+    return _binary_op(a, b, aclnn.logaddexp, "logaddexp")
+
+
+def logaddexp2(a, b):
+    return _binary_op(a, b, aclnn.logaddexp2, "logaddexp2")
+
+
+def hypot(a, b):
+    return sqrt(add(mul(a, a), mul(b, b)))
+
+
+def remainder(a, b):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu":
+        raise ValueError("NPU remainder expects NPU tensors")
+    if hasattr(b, "shape"):
+        out_shape = _broadcast_shape(a.shape, b.shape)
+        out_stride = npu_runtime._contiguous_stride(out_shape)
+        out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+        aclnn.remainder_tensor_tensor(
+            _unwrap_storage(a).data_ptr(),
+            _unwrap_storage(b).data_ptr(),
+            out_ptr,
+            a.shape,
+            a.stride,
+            b.shape,
+            b.stride,
+            out_shape,
+            out_stride,
+            a.dtype,
+            runtime,
+            stream=stream.stream,
+        )
+        out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+        return _wrap_tensor(out_storage, out_shape, out_stride)
+    out_shape = a.shape
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.remainder_tensor_scalar(
+        _unwrap_storage(a).data_ptr(),
+        float(b),
+        out_ptr,
+        out_shape,
+        out_stride,
+        a.dtype,
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)
+
+
+def fmod(a, b):
+    runtime = npu_runtime.get_runtime((a.device.index or 0))
+    stream = npu_state.current_stream((a.device.index or 0))
+    if a.device.type != "npu":
+        raise ValueError("NPU fmod expects NPU tensors")
+    if hasattr(b, "shape"):
+        out_shape = _broadcast_shape(a.shape, b.shape)
+        out_stride = npu_runtime._contiguous_stride(out_shape)
+        out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+        aclnn.fmod_tensor(
+            _unwrap_storage(a).data_ptr(),
+            _unwrap_storage(b).data_ptr(),
+            out_ptr,
+            a.shape,
+            a.stride,
+            b.shape,
+            b.stride,
+            out_shape,
+            out_stride,
+            a.dtype,
+            runtime,
+            stream=stream.stream,
+        )
+        out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+        return _wrap_tensor(out_storage, out_shape, out_stride)
+    out_shape = a.shape
+    out_stride = npu_runtime._contiguous_stride(out_shape)
+    out_ptr = npu_runtime._alloc_device(_numel(out_shape) * _dtype_itemsize(a.dtype), runtime=runtime)
+    aclnn.fmod_scalar(
+        _unwrap_storage(a).data_ptr(),
+        float(b),
+        out_ptr,
+        out_shape,
+        out_stride,
+        a.dtype,
+        runtime,
+        stream=stream.stream,
+    )
+    out_storage = npu_typed_storage_from_ptr(out_ptr, _numel(out_shape), a.dtype, device=a.device)
+    return _wrap_tensor(out_storage, out_shape, out_stride)

@@ -382,3 +382,147 @@ def test_npu_to_cpu_synchronizes(monkeypatch):
     t = torch.ones((1,), device="npu")
     _ = t.to("cpu")
     assert "sync" in calls
+
+
+def test_npu_allclose_isclose_equal():
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, 2.0, 3.0], device="npu")
+    b = torch.tensor([1.0, 2.001, 3.0], device="npu")
+    assert torch.allclose(a, b, rtol=1e-2, atol=1e-3) is True
+    assert torch.allclose(a, b, rtol=1e-5, atol=1e-6) is False
+    isclose = torch.isclose(a, b, rtol=1e-2, atol=1e-3)
+    expected = np.isclose(a.to("cpu").numpy(), b.to("cpu").numpy(), rtol=1e-2, atol=1e-3)
+    assert isclose.dtype == torch.bool
+    assert np.array_equal(isclose.to("cpu").numpy(), expected)
+    assert torch.equal(a, a) is True
+    assert torch.equal(a, b) is False
+
+
+@pytest.mark.parametrize(
+    "op_name, numpy_fn, data",
+    [
+        ("asinh", np.arcsinh, np.array([-2.0, -0.5, 0.5, 2.0], dtype=np.float32)),
+        ("acosh", np.arccosh, np.array([1.0, 1.5, 2.0, 3.0], dtype=np.float32)),
+        ("atanh", np.arctanh, np.array([-0.5, -0.25, 0.25, 0.5], dtype=np.float32)),
+        ("atan", np.arctan, np.array([-2.0, -0.5, 0.5, 2.0], dtype=np.float32)),
+        ("asin", np.arcsin, np.array([-0.5, -0.25, 0.25, 0.5], dtype=np.float32)),
+        ("acos", np.arccos, np.array([-0.5, 0.0, 0.25, 0.5], dtype=np.float32)),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_unary_inverse_ops(op_name, numpy_fn, data, dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    x = torch.tensor(data, device="npu", dtype=dtype)
+    out = getattr(torch, op_name)(x)
+    expected = numpy_fn(data).astype(np.float32)
+    assert np.allclose(
+        out.to("cpu").numpy().astype(np.float32),
+        expected,
+        atol=1e-3,
+        rtol=1e-3,
+    )
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_atan2(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, -1.0, 0.5], device="npu", dtype=dtype)
+    b = torch.tensor([1.0, 1.0, -0.5], device="npu", dtype=dtype)
+    out = torch.atan2(a, b)
+    expected = np.arctan2(a.to("cpu").numpy(), b.to("cpu").numpy())
+    np.testing.assert_allclose(out.to("cpu").numpy(), expected, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_min_max_fmin_fmax(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, float("nan"), 3.0], device="npu", dtype=dtype)
+    b = torch.tensor([2.0, 4.0, float("nan")], device="npu", dtype=dtype)
+    a_cpu = a.to("cpu").numpy()
+    b_cpu = b.to("cpu").numpy()
+    if dtype == torch.float16:
+        expected_min = torch.min(a, b).to("cpu").numpy()
+        expected_max = torch.max(a, b).to("cpu").numpy()
+    else:
+        expected_min = np.minimum(a_cpu, b_cpu)
+        expected_max = np.maximum(a_cpu, b_cpu)
+    expected_fmin = np.fmin(a_cpu, b_cpu)
+    expected_fmax = np.fmax(a_cpu, b_cpu)
+    np.testing.assert_allclose(torch.min(a, b).to("cpu").numpy(), expected_min, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(torch.max(a, b).to("cpu").numpy(), expected_max, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(torch.fmin(a, b).to("cpu").numpy(), expected_fmin, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(torch.fmax(a, b).to("cpu").numpy(), expected_fmax, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_where(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    cond = torch.tensor([True, False, True], device="npu")
+    x = torch.tensor([1.0, 2.0, 3.0], device="npu", dtype=dtype)
+    y = torch.tensor([4.0, 5.0, 6.0], device="npu", dtype=dtype)
+    out = torch.where(cond, x, y)
+    expected = np.where(cond.to("cpu").numpy(), x.to("cpu").numpy(), y.to("cpu").numpy())
+    np.testing.assert_allclose(out.to("cpu").numpy(), expected, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_lerp(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, 2.0, 3.0], device="npu", dtype=dtype)
+    b = torch.tensor([3.0, 4.0, 5.0], device="npu", dtype=dtype)
+    weight = torch.tensor([0.0, 0.5, 1.0], device="npu", dtype=dtype)
+    out = torch.lerp(a, b, weight)
+    expected = a.to("cpu").numpy() + weight.to("cpu").numpy() * (b.to("cpu").numpy() - a.to("cpu").numpy())
+    np.testing.assert_allclose(out.to("cpu").numpy(), expected, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_addcmul_addcdiv(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, 2.0, 3.0], device="npu", dtype=dtype)
+    b = torch.tensor([2.0, 3.0, 4.0], device="npu", dtype=dtype)
+    c = torch.tensor([4.0, 5.0, 6.0], device="npu", dtype=dtype)
+    out_mul = torch.addcmul(a, b, c)
+    out_div = torch.addcdiv(a, b, c)
+    expected_mul = a.to("cpu").numpy() + (b.to("cpu").numpy() * c.to("cpu").numpy())
+    expected_div = a.to("cpu").numpy() + (b.to("cpu").numpy() / c.to("cpu").numpy())
+    np.testing.assert_allclose(out_mul.to("cpu").numpy(), expected_mul, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(out_div.to("cpu").numpy(), expected_div, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_logaddexp_logaddexp2_hypot(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([1.0, -2.0, 3.0], device="npu", dtype=dtype)
+    b = torch.tensor([2.0, 3.0, -4.0], device="npu", dtype=dtype)
+    out_logaddexp = torch.logaddexp(a, b)
+    out_logaddexp2 = torch.logaddexp2(a, b)
+    out_hypot = torch.hypot(a, b)
+    expected_logaddexp = np.logaddexp(a.to("cpu").numpy(), b.to("cpu").numpy())
+    expected_logaddexp2 = np.logaddexp2(a.to("cpu").numpy(), b.to("cpu").numpy())
+    expected_hypot = np.hypot(a.to("cpu").numpy(), b.to("cpu").numpy())
+    np.testing.assert_allclose(out_logaddexp.to("cpu").numpy(), expected_logaddexp, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(out_logaddexp2.to("cpu").numpy(), expected_logaddexp2, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(out_hypot.to("cpu").numpy(), expected_hypot, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_npu_remainder_fmod(dtype):
+    if not torch.npu.is_available():
+        pytest.skip("NPU not available")
+    a = torch.tensor([5.5, -5.5, 5.5, -5.5], device="npu", dtype=dtype)
+    b = torch.tensor([2.0, 2.0, -2.0, -2.0], device="npu", dtype=dtype)
+    out_remainder = torch.remainder(a, b)
+    out_fmod = torch.fmod(a, b)
+    expected_remainder = np.remainder(a.to("cpu").numpy(), b.to("cpu").numpy())
+    expected_fmod = np.fmod(a.to("cpu").numpy(), b.to("cpu").numpy())
+    np.testing.assert_allclose(out_remainder.to("cpu").numpy(), expected_remainder, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(out_fmod.to("cpu").numpy(), expected_fmod, rtol=1e-3, atol=1e-3)
